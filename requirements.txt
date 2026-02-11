@@ -1,0 +1,9 @@
+flask==3.0.3
+langchain==0.3.17
+langchain-groq==0.2.1
+langchain-huggingface==0.1.2
+langchain-community==0.3.16
+pypdf==4.2.0
+faiss-cpu==1.8.0.post1
+sentence-transformers==3.0.1
+python-dotenv==1.0.1

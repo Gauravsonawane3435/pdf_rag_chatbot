@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF AI - Intelligent RAG Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo-container">
+                <div class="logo">
+                    <i data-lucide="bot"></i>
+                    <span>PDF AI</span>
+                </div>
+                <button class="theme-toggle" id="theme-btn" title="Toggle Theme">
+                    <i data-lucide="sun" id="theme-icon"></i>
+                </button>
+            </div>
+
+            <div class="upload-section">
+                <div class="upload-area" id="drop-zone">
+                    <input type="file" id="file-input" accept=".pdf">
+                    <i data-lucide="upload-cloud" class="upload-icon"></i>
+                    <p class="upload-text"><strong>Click to upload</strong> or drag and drop</p>
+                    <p class="upload-text" style="font-size: 0.7rem; margin-top: 0.5rem;">PDF (max. 16MB)</p>
+                </div>
+                <div id="file-status" style="margin-top: 1rem; font-size: 0.85rem; display: none;">
+                    <div
+                        style="display: flex; align-items: center; gap: 0.5rem; background: var(--input-bg); padding: 0.75rem; border-radius: 10px; border: 1px solid var(--border);">
+                        <i data-lucide="file-text" style="width: 16px; color: var(--accent);"></i>
+                        <span id="file-name"
+                            style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-main);"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-indicator">
+                <h3>System Status</h3>
+                <div class="status-badge">
+                    <div class="dot" id="db-status"></div>
+                    <span id="db-status-text">No PDF Loaded</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-container">
+            <header class="chat-header">
+                <h1 style="font-size: 1.15rem; font-weight: 700; color: var(--text-main);">Chat with Knowledge</h1>
+                <p style="font-size: 0.8rem; color: var(--text-muted);">Process a PDF to start asking questions</p>
+            </header>
+
+            <div class="chat-messages" id="chat-box">
+                <div class="bot-message message">
+                    Hello! 👋 Upload a PDF document using the sidebar, and I'll analyze it so you can ask me anything
+                    about its content.
+                </div>
+            </div>
+
+            <div class="typing-indicator" id="typing">
+                AI is thinking...
+            </div>
+
+            <div class="chat-input-area">
+                <div class="input-wrapper">
+                    <input type="text" id="chat-input" placeholder="Type your question here..." disabled>
+                    <button id="send-btn" disabled>
+                        <i data-lucide="send"></i>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileNameDisplay = document.getElementById('file-name');
+        const fileStatus = document.getElementById('file-status');
+        const dbStatusDot = document.getElementById('db-status');
+        const dbStatusText = document.getElementById('db-status-text');
+        const chatInput = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('send-btn');
+        const chatBox = document.getElementById('chat-box');
+        const typingIndicator = document.getElementById('typing');
+        const themeBtn = document.getElementById('theme-btn');
+        const themeIcon = document.getElementById('theme-icon');
+        const html = document.documentElement;
+
+        // Theme Management
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        html.setAttribute('data-theme', savedTheme);
+        updateThemeIcon(savedTheme);
+
+        themeBtn.onclick = () => {
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        };
+
+        function updateThemeIcon(theme) {
+            themeIcon.setAttribute('data-lucide', theme === 'dark' ? 'sun' : 'moon');
+            lucide.createIcons();
+        }
+
+        // Handle File Selection
+        dropZone.onclick = () => fileInput.click();
+
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) handleUpload(file);
+        };
+
+        async function handleUpload(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Update UI
+            fileNameDisplay.textContent = file.name;
+            fileStatus.style.display = 'block';
+            dbStatusText.textContent = 'Processing...';
+            dbStatusDot.className = 'dot';
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    dbStatusDot.classList.add('active');
+                    dbStatusText.textContent = 'Ready to Chat';
+                    chatInput.disabled = false;
+                    sendBtn.disabled = false;
+                    appendMessage('bot', '✅ Success! The PDF is indexed. What would you like to know?');
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (error) {
+                appendMessage('bot', '❌ Error: ' + error.message);
+                dbStatusText.textContent = 'Upload Failed';
+            }
+        }
+
+        async function sendMessage() {
+            const question = chatInput.value.trim();
+            if (!question) return;
+
+            appendMessage('user', question);
+            chatInput.value = '';
+            typingIndicator.style.display = 'block';
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question })
+                });
+                const data = await response.json();
+
+                typingIndicator.style.display = 'none';
+                if (response.ok) {
+                    appendMessage('bot', data.answer);
+                } else {
+                    appendMessage('bot', '❌ Error: ' + data.error);
+                }
+            } catch (error) {
+                typingIndicator.style.display = 'none';
+                appendMessage('bot', '❌ Failed to reach server.');
+            }
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function appendMessage(sender, text) {
+            const div = document.createElement('div');
+            div.className = `${sender}-message message`;
+            div.textContent = text;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // Event Listeners
+        sendBtn.onclick = sendMessage;
+        chatInput.onkeypress = (e) => {
+            if (e.key === 'Enter') sendMessage();
+        };
+
+        // Drag and drop events
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const file = dt.files[0];
+            if (file && file.type === 'application/pdf') {
+                handleUpload(file);
+            }
+        });
+    </script>
+</body>
+
+</html>
