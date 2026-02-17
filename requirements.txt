@@ -4,8 +4,8 @@ gunicorn
 python-multipart
 jinja2
 sqlalchemy
-flask-sqlalchemy
-flask-cors
+pydantic-settings
+uvloop; platform_system != 'Windows'
 langchain==0.3.17
 langchain-community==0.3.16
 langchain-core==0.3.33

@@ -32,8 +32,10 @@ class RAGService:
 
     def add_documents(self, session_id, documents):
         chunks = self.text_splitter.split_documents(documents)
+        if not chunks:
+            return None
+            
         vector_store = self.get_vector_store(session_id)
-        
         if vector_store:
             vector_store.add_documents(chunks)
         else:
