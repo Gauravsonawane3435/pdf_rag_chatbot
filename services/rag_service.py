@@ -1,4 +1,5 @@
 import os
+import pickle
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -9,6 +10,7 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_cohere import CohereRerank as LangChainCohereRerank
+from services.hybrid_retriever import HybridRetriever
 
 class RAGService:
     def __init__(self, config):
@@ -19,6 +21,8 @@ class RAGService:
             chunk_overlap=config.CHUNK_OVERLAP
         )
         self.vector_store_path = config.VECTOR_STORE_PATH
+        # Store documents for BM25 hybrid search
+        self.documents_cache = {}
 
     def get_vector_store(self, session_id):
         save_path = f"{self.vector_store_path}_{session_id}"
@@ -37,10 +41,51 @@ class RAGService:
             
         save_path = f"{self.vector_store_path}_{session_id}"
         vector_store.save_local(save_path)
+        
+        # Cache all documents for BM25 hybrid search
+        if session_id not in self.documents_cache:
+            self.documents_cache[session_id] = []
+        self.documents_cache[session_id].extend(chunks)
+        
+        # Persist document cache
+        self._save_documents_cache(session_id)
+        
         return vector_store
+    
+    def _save_documents_cache(self, session_id):
+        """Save documents cache for BM25."""
+        cache_path = f"{self.vector_store_path}_{session_id}_docs.pkl"
+        with open(cache_path, 'wb') as f:
+            pickle.dump(self.documents_cache.get(session_id, []), f)
+    
+    def _load_documents_cache(self, session_id):
+        """Load documents cache for BM25."""
+        cache_path = f"{self.vector_store_path}_{session_id}_docs.pkl"
+        if os.path.exists(cache_path):
+            with open(cache_path, 'rb') as f:
+                self.documents_cache[session_id] = pickle.load(f)
+                return self.documents_cache[session_id]
+        return []
+    
+    def remove_session_cache(self, session_id):
+        """Remove session from in-memory cache."""
+        if session_id in self.documents_cache:
+            del self.documents_cache[session_id]
 
-    def get_retriever(self, vector_store, llm, use_reranker=True):
+    def get_retriever(self, vector_store, llm, session_id, use_hybrid=True, use_reranker=True):
         base_retriever = vector_store.as_retriever(search_kwargs={"k": 10})
+        
+        # Use Hybrid Search (BM25 + Semantic)
+        if use_hybrid:
+            # Load cached documents for BM25
+            documents = self.documents_cache.get(session_id) or self._load_documents_cache(session_id)
+            if documents:
+                base_retriever = HybridRetriever(
+                    vector_retriever=base_retriever,
+                    documents=documents,
+                    k=10,
+                    alpha=0.6  # 60% semantic, 40% keyword
+                )
         
         if use_reranker and os.getenv("COHERE_API_KEY"):
             compressor = LangChainCohereRerank(

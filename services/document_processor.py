@@ -6,13 +6,21 @@ from langchain_core.documents import Document as LC_Document
 import pytesseract
 from PIL import Image
 import openpyxl
+from services.multimodal_processor import MultiModalProcessor
 
 class DocumentProcessor:
+    multimodal_processor = None
+    
     @staticmethod
-    def process_file(file_path):
+    def set_multimodal_processor(groq_api_key: str = None):
+        """Initialize multi-modal processor with optional vision capabilities."""
+        DocumentProcessor.multimodal_processor = MultiModalProcessor(groq_api_key)
+    
+    @staticmethod
+    def process_file(file_path, use_multimodal=True):
         ext = os.path.splitext(file_path)[1].lower()
         if ext == '.pdf':
-            return DocumentProcessor._process_pdf(file_path)
+            return DocumentProcessor._process_pdf(file_path, use_multimodal)
         elif ext in ['.docx', '.doc']:
             return DocumentProcessor._process_docx(file_path)
         elif ext in ['.xlsx', '.xls']:
@@ -27,7 +35,15 @@ class DocumentProcessor:
             raise ValueError(f"Unsupported file format: {ext}")
 
     @staticmethod
-    def _process_pdf(file_path):
+    def _process_pdf(file_path, use_multimodal=True):
+        # Use advanced multi-modal processing if available
+        if use_multimodal and DocumentProcessor.multimodal_processor:
+            try:
+                return DocumentProcessor.multimodal_processor.process_pdf_multimodal(file_path)
+            except Exception as e:
+                print(f"Multi-modal processing failed, falling back to basic: {e}")
+        
+        # Fallback to basic PDF processing
         loader = PyPDFLoader(file_path)
         return loader.load()
 
