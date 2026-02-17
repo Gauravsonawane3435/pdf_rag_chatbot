@@ -2,11 +2,12 @@ services:
   - type: web
     name: nexretriever-rag-chatbot
     env: python
+    runtime: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 --log-level info"
+    startCommand: "bash start.sh"
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.0
+        value: 3.11.9
       - key: GROQ_API_KEY
         sync: false
       - key: OPENAI_API_KEY
