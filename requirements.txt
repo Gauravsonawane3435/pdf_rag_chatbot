@@ -25,3 +25,9 @@ sqlalchemy
 werkzeug
 requests
 numpy
+rank-bm25
+pdfplumber
+pdf2image
+tabulate
+markdown
+gunicorn

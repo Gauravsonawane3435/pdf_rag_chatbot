@@ -3,10 +3,20 @@ __pycache__/
 *.py[cod]
 *$py.class
 venv/
+.venv/
 .env
 
 # Data
 data/*.pdf
+
+# Uploads and Vector Stores
+uploads/
+vector_db_*/
+*.pkl
+
+# Database
+instance/
+*.db
 
 # IDE
 .vscode/
