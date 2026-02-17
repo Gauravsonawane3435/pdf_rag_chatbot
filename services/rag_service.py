@@ -15,7 +15,7 @@ from services.hybrid_retriever import HybridRetriever
 class RAGService:
     def __init__(self, config):
         self.config = config
-        self.embeddings = HuggingFaceEmbeddings(model_name=config.EMBEDDING_MODEL)
+        self._embeddings = None
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=config.CHUNK_SIZE,
             chunk_overlap=config.CHUNK_OVERLAP
@@ -23,6 +23,13 @@ class RAGService:
         self.vector_store_path = config.VECTOR_STORE_PATH
         # Store documents for BM25 hybrid search
         self.documents_cache = {}
+
+    @property
+    def embeddings(self):
+        if self._embeddings is None:
+            from langchain_huggingface import HuggingFaceEmbeddings
+            self._embeddings = HuggingFaceEmbeddings(model_name=self.config.EMBEDDING_MODEL)
+        return self._embeddings
 
     def get_vector_store(self, session_id):
         save_path = f"{self.vector_store_path}_{session_id}"
