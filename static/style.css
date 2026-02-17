@@ -149,3 +149,44 @@
 .chat-bubble-bot {
     border-bottom-left-radius: 4px;
 }
+
+/* Responsive Improvements */
+@media (max-width: 768px) {
+
+    /* Improve touch targets on mobile */
+    button {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    /* Better spacing for mobile chat messages */
+    .prose {
+        font-size: 0.875rem;
+        line-height: 1.5;
+    }
+
+    /* Adjust padding for mobile */
+    .chat-bubble-user,
+    .chat-bubble-bot {
+        padding: 0.75rem !important;
+    }
+}
+
+/* Smooth transitions for sidebar */
+#sidebar {
+    transition: transform 0.3s ease-in-out;
+}
+
+#sidebar-overlay {
+    transition: opacity 0.3s ease-in-out;
+}
+
+/* Ensure modals are scrollable on small screens */
+@media (max-height: 600px) {
+
+    #analytics-modal>div,
+    #pdf-viewer-modal>div {
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+}

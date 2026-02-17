@@ -19,6 +19,39 @@ const newChatBtn = document.getElementById('new-chat-btn');
 const streamToggle = document.getElementById('stream-toggle');
 const sessionList = document.getElementById('session-list');
 
+// Mobile Sidebar Elements
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+const closeSidebarBtn = document.getElementById('close-sidebar-btn');
+const sidebar = document.getElementById('sidebar');
+const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+// Mobile Sidebar Functions
+function openSidebar() {
+    sidebar.classList.remove('-translate-x-full');
+    sidebarOverlay.classList.remove('hidden', 'opacity-0');
+}
+
+function closeSidebar() {
+    sidebar.classList.add('-translate-x-full');
+    sidebarOverlay.classList.add('opacity-0');
+    setTimeout(() => {
+        sidebarOverlay.classList.add('hidden');
+    }, 300);
+}
+
+// Mobile Sidebar Event Listeners
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', openSidebar);
+}
+
+if (closeSidebarBtn) {
+    closeSidebarBtn.addEventListener('click', closeSidebar);
+}
+
+if (sidebarOverlay) {
+    sidebarOverlay.addEventListener('click', closeSidebar);
+}
+
 // Initialize
 async function init() {
     // Always start a new session on load
@@ -98,15 +131,20 @@ newChatBtn.addEventListener('click', async () => {
     // Clear UI
     chatMessages.innerHTML = `
         <div class="max-w-3xl mx-auto text-center py-12">
-            <div class="w-20 h-20 bg-primary-100 dark:bg-primary-900/30 rounded-3xl flex items-center justify-center text-primary-600 dark:text-primary-400 mx-auto mb-6">
-                <i class="fas fa-robot text-4xl"></i>
+            <div class="w-16 h-16 md:w-20 md:h-20 bg-primary-100 dark:bg-primary-900/30 rounded-3xl flex items-center justify-center text-primary-600 dark:text-primary-400 mx-auto mb-6">
+                <i class="fas fa-robot text-3xl md:text-4xl"></i>
             </div>
-            <h2 class="text-3xl font-bold text-gray-800 dark:text-white mb-3">Hello! I'm NexRetriever</h2>
-            <p class="text-gray-500 dark:text-slate-400 max-w-md mx-auto">Upload your documents and let's start a new conversation.</p>
+            <h2 class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white mb-3">Hello! I'm NexRetriever</h2>
+            <p class="text-sm md:text-base text-gray-500 dark:text-slate-400 max-w-md mx-auto">Upload your documents and let's start a new conversation.</p>
         </div>
     `;
     docList.innerHTML = '';
     loadSessionHistory();
+
+    // Close sidebar on mobile
+    if (window.innerWidth < 768) {
+        closeSidebar();
+    }
 });
 
 // Functions
@@ -120,7 +158,13 @@ async function loadSessionHistory() {
             const div = document.createElement('div');
             div.className = `group p-3 rounded-xl cursor-pointer transition-all border flex items-center justify-between gap-2 ${s.id === sessionId ? 'bg-primary-50 dark:bg-primary-900/10 border-primary-200 dark:border-primary-800' : 'bg-transparent border-transparent hover:bg-gray-100 dark:hover:bg-slate-800'}`;
 
-            div.onclick = () => switchSession(s.id);
+            div.onclick = () => {
+                switchSession(s.id);
+                // Close sidebar on mobile
+                if (window.innerWidth < 768) {
+                    closeSidebar();
+                }
+            };
 
             div.innerHTML = `
                 <div class="flex-1 min-w-0">
@@ -403,7 +447,7 @@ function appendMessage(sender, content, sources = []) {
     }
 
     div.innerHTML = `
-        <div class="max-w-[80%] flex ${sender === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-4">
+        <div class="max-w-[90%] md:max-w-[80%] flex ${sender === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-4">
             <div class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-sm ${sender === 'user' ? 'bg-primary-600 text-white' : 'bg-gray-200 dark:bg-slate-800 text-gray-500 dark:text-slate-400'}">
                 <i class="fas ${sender === 'user' ? 'fa-user' : 'fa-robot'}"></i>
             </div>
@@ -422,7 +466,7 @@ function appendTypingIndicator() {
     const div = document.createElement('div');
     div.className = 'flex justify-start animate-slide-in';
     div.innerHTML = `
-        <div class="max-w-[80%] flex items-start gap-4">
+        <div class="max-w-[90%] md:max-w-[80%] flex items-start gap-4">
             <div class="w-8 h-8 rounded-full bg-gray-200 dark:bg-slate-800 flex items-center justify-center text-gray-500">
                 <i class="fas fa-robot text-sm"></i>
             </div>
@@ -508,6 +552,139 @@ async function showAnalytics() {
             <span>${a.num_sources} docs</span>
         `;
         rows.appendChild(div);
+    });
+}
+
+// ========== PDF VIEWER FUNCTIONALITY ==========
+let pdfDoc = null;
+let currentPage = 1;
+let currentPdfUrl = null;
+
+const pdfViewerModal = document.getElementById('pdf-viewer-modal');
+const closePdfViewer = document.getElementById('close-pdf-viewer');
+const pdfCanvas = document.getElementById('pdf-canvas');
+const pdfPrevPage = document.getElementById('pdf-prev-page');
+const pdfNextPage = document.getElementById('pdf-next-page');
+const pdfCurrentPageSpan = document.getElementById('pdf-current-page');
+const pdfTotalPagesSpan = document.getElementById('pdf-total-pages');
+const pdfFilenameSpan = document.getElementById('pdf-viewer-filename');
+
+// Initialize PDF.js worker
+if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+closePdfViewer.addEventListener('click', () => {
+    pdfViewerModal.classList.add('hidden');
+    pdfDoc = null;
+    currentPdfUrl = null;
+});
+
+pdfPrevPage.addEventListener('click', () => {
+    if (currentPage > 1) {
+        currentPage--;
+        renderPdfPage(currentPage);
+    }
+});
+
+pdfNextPage.addEventListener('click', () => {
+    if (pdfDoc && currentPage < pdfDoc.numPages) {
+        currentPage++;
+        renderPdfPage(currentPage);
+    }
+});
+
+async function openPdfViewer(filename, page = 1) {
+    const pdfUrl = `/api/view-pdf/${sessionId}/${filename}`;
+    currentPdfUrl = pdfUrl;
+    currentPage = page;
+
+    pdfFilenameSpan.textContent = filename;
+    pdfViewerModal.classList.remove('hidden');
+
+    try {
+        const loadingTask = pdfjsLib.getDocument(pdfUrl);
+        pdfDoc = await loadingTask.promise;
+        pdfTotalPagesSpan.textContent = pdfDoc.numPages;
+        await renderPdfPage(currentPage);
+    } catch (error) {
+        console.error('Error loading PDF:', error);
+        alert('Failed to load PDF');
+        pdfViewerModal.classList.add('hidden');
+    }
+}
+
+async function renderPdfPage(pageNum) {
+    if (!pdfDoc) return;
+
+    const page = await pdfDoc.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 1.5 });
+
+    pdfCanvas.width = viewport.width;
+    pdfCanvas.height = viewport.height;
+
+    const ctx = pdfCanvas.getContext('2d');
+    const renderContext = {
+        canvasContext: ctx,
+        viewport: viewport
+    };
+
+    await page.render(renderContext).promise;
+    pdfCurrentPageSpan.textContent = pageNum;
+}
+
+// Update source tags to be clickable
+// Update source tags to be clickable
+function appendSources(container, sources) {
+    // Sources display disabled by user request
+    return;
+}
+
+// Update appendMessage to make sources clickable (duplicate - sources disabled)
+function appendMessage(sender, content, sources = []) {
+    const div = document.createElement('div');
+    div.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'} animate-slide-in`;
+
+    // Sources removed by request
+
+    div.innerHTML = `
+        <div class="max-w-[90%] md:max-w-[80%] flex ${sender === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-4">
+            <div class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-sm ${sender === 'user' ? 'bg-primary-600 text-white' : 'bg-gray-200 dark:bg-slate-800 text-gray-500 dark:text-slate-400'}">
+                <i class="fas ${sender === 'user' ? 'fa-user' : 'fa-robot'}"></i>
+            </div>
+            <div class="p-4 rounded-2xl ${sender === 'user' ? 'bg-primary-600 text-white chat-bubble-user shadow-lg shadow-primary-500/20' : 'bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 text-gray-800 dark:text-slate-100 chat-bubble-bot shadow-sm'}">
+                <div class="prose dark:prose-invert text-sm leading-relaxed">${formatContent(content)}</div>
+            </div>
+        </div>
+    `;
+
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Update loadDocuments to make PDFs clickable
+async function loadDocuments() {
+    const response = await fetch(`/api/documents?session_id=${sessionId}`);
+    const docs = await response.json();
+
+    docList.innerHTML = '';
+    docs.forEach(doc => {
+        const div = document.createElement('div');
+        const isPdf = doc.file_type === 'pdf';
+        div.className = `flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-800/50 rounded-xl border border-gray-100 dark:border-slate-800 animate-slide-in ${isPdf ? 'cursor-pointer hover:bg-primary-50 dark:hover:bg-primary-900/10 transition-colors' : ''}`;
+
+        if (isPdf) {
+            div.onclick = () => openPdfViewer(doc.filename, 1);
+        }
+
+        div.innerHTML = `
+            <div class="flex items-center gap-3 overflow-hidden">
+                <i class="fas ${getFileIcon(doc.file_type)} text-primary-500"></i>
+                <span class="text-sm font-medium text-gray-700 dark:text-slate-200 truncate">${doc.filename}</span>
+            </div>
+            <span class="text-[10px] text-gray-400 font-bold uppercase">${doc.file_type}</span>
+        `;
+        docList.appendChild(div);
     });
 }
 
