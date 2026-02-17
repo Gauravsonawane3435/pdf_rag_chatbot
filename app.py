@@ -21,6 +21,9 @@ db.init_app(app)
 rag_service = RAGService(Config)
 cache_service = CacheService()
 
+# Initialize multi-modal processor with Groq API for vision
+DocumentProcessor.set_multimodal_processor(os.getenv('GROQ_API_KEY'))
+
 with app.app_context():
     db.create_all()
 
@@ -122,7 +125,7 @@ def chat():
         return jsonify({"answer": "Please upload documents first.", "sources": []})
         
     llm = LLMService.get_llm(provider, model)
-    retriever = rag_service.get_retriever(vector_store, llm)
+    retriever = rag_service.get_retriever(vector_store, llm, session_id, use_hybrid=True)
     rag_chain = rag_service.get_rag_chain(llm, retriever)
     
     chat_history = rag_service.format_chat_history(session.messages[-10:]) # last 10 messages
@@ -184,10 +187,10 @@ def chat_stream():
     vector_store = rag_service.get_vector_store(session_id)
     
     if not vector_store:
-        return Response("data: " + json.dumps({"answer": "Please upload documents first."}) + "\n\n", mimetype='text/event-stream')
+        return Response("data: " + json.dumps({"token": "Please upload documents first."}) + "\n\n", mimetype='text/event-stream')
 
     llm = LLMService.get_llm(provider, model)
-    retriever = rag_service.get_retriever(vector_store, llm)
+    retriever = rag_service.get_retriever(vector_store, llm, session_id, use_hybrid=True)
     rag_chain = rag_service.get_rag_chain(llm, retriever)
     chat_history = rag_service.format_chat_history(session.messages[-10:])
 
@@ -284,22 +287,52 @@ def delete_session():
     session_id = request.json.get('session_id')
     session = ChatSession.query.get(session_id)
     if session:
-        # Delete vector store files
-        path = f"{Config.VECTOR_STORE_PATH}_{session_id}"
-        if os.path.exists(path):
-            import shutil
-            shutil.rmtree(path)
-        
-        # Delete uploaded files for this session
-        for doc in session.documents:
-            if os.path.exists(doc.file_path):
-                os.remove(doc.file_path)
-                
-        db.session.delete(session)
-        db.session.commit()
-        return jsonify({"message": "Session deleted successfully"})
+        try:
+            # Clear in-memory cache
+            rag_service.remove_session_cache(session_id)
+            
+            # 1. Delete vector store folder
+            path = f"{Config.VECTOR_STORE_PATH}_{session_id}"
+            if os.path.exists(path):
+                import shutil
+                try:
+                    shutil.rmtree(path)
+                except Exception as e:
+                    print(f"Error deleting vector store: {e}")
+
+            # 2. Delete hybrid search document cache
+            cache_path = f"{Config.VECTOR_STORE_PATH}_{session_id}_docs.pkl"
+            if os.path.exists(cache_path):
+                try:
+                    os.remove(cache_path)
+                except Exception as e:
+                    print(f"Error deleting doc cache: {e}")
+            
+            # 3. Delete uploaded files
+            for doc in session.documents:
+                if doc.file_path and os.path.exists(doc.file_path):
+                    try:
+                        os.remove(doc.file_path)
+                    except Exception as e:
+                        print(f"Error deleting file {doc.file_path}: {e}")
+                    
+            db.session.delete(session)
+            db.session.commit()
+            return jsonify({"message": "Session deleted successfully"})
+        except Exception as e:
+            return jsonify({"error": f"Deletion failed: {str(e)}"}), 500
     
     return jsonify({"error": "Session not found"}), 404
 
+@app.route('/api/view-pdf/<session_id>/<filename>')
+def view_pdf(session_id, filename):
+    """Serve PDF file for viewing."""
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{session_id}_{filename}")
+    if os.path.exists(file_path) and file_path.endswith('.pdf'):
+        from flask import send_file
+        return send_file(file_path, mimetype='application/pdf')
+    return jsonify({"error": "PDF not found"}), 404
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
