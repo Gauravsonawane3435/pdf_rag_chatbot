@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 fastapi
 uvicorn
 gunicorn
@@ -14,6 +16,7 @@ langchain-openai==0.3.0
 langchain-anthropic==0.3.1
 langchain-cohere==0.3.1
 langchain-huggingface==0.1.2
+torch --index-url https://download.pytorch.org/whl/cpu
 faiss-cpu
 sentence-transformers
 pypdf
