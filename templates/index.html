@@ -93,55 +93,36 @@
 
         <!-- Main Content -->
         <main class="flex-1 flex flex-col relative bg-transparent w-full md:w-auto">
-            <!-- Header -->
+            <!-- Header (Simplified like ChatGPT) -->
             <header
-                class="h-16 border-b border-gray-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-3 md:px-8 z-10 sticky top-0">
-                <div class="flex items-center gap-2 md:gap-4 flex-shrink-0">
+                class="h-14 md:h-16 border-b border-gray-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-3 md:px-8 z-10 sticky top-0">
+                <div class="flex items-center gap-1 md:gap-4">
                     <!-- Mobile Menu Button -->
-                    <button id="mobile-menu-btn"
-                        class="md:hidden p-2 text-gray-500 hover:text-primary-600 transition-colors">
-                        <i class="fas fa-bars text-xl"></i>
+                    <button id="mobile-menu-btn" class="p-2 text-gray-500 hover:text-primary-600 transition-colors">
+                        <i class="fas fa-bars-staggered text-lg"></i>
                     </button>
-
-                    <span class="flex items-center gap-1.5 md:gap-2">
-                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                        <span class="text-[10px] sm:text-sm font-medium text-gray-600 dark:text-slate-400"
-                            id="session-status">Ready</span>
-                    </span>
                 </div>
 
-                <div class="flex items-center gap-1 md:gap-3 overflow-x-auto no-scrollbar">
-                    <!-- Vision Toggle -->
-                    <div
-                        class="flex items-center gap-1.5 md:gap-2 bg-gray-50 dark:bg-slate-800 p-1.5 md:p-2 rounded-lg ring-1 ring-gray-200 dark:ring-slate-700 flex-shrink-0">
-                        <span
-                            class="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden xs:inline">Vision</span>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" id="vision-toggle" class="sr-only peer">
-                            <div
-                                class="w-7 h-4 md:w-8 md:h-4 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-primary-600">
-                            </div>
-                        </label>
-                    </div>
-
-                    <div
-                        class="hidden sm:flex items-center gap-2 bg-gray-50 dark:bg-slate-800 p-2 rounded-lg ring-1 ring-gray-200 dark:ring-slate-700 flex-shrink-0">
-                        <span class="text-xs font-semibold text-gray-500 dark:text-slate-400">Stream</span>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" id="stream-toggle" class="sr-only peer" checked>
-                            <div
-                                class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600">
-                            </div>
-                        </label>
-                    </div>
-
+                <!-- Centered Model Selection (like ChatGPT 5.2) -->
+                <div class="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 cursor-pointer">
                     <select id="model-select"
-                        class="bg-gray-50 dark:bg-slate-800 text-gray-700 dark:text-slate-200 text-[10px] md:text-sm rounded-lg border-none ring-1 ring-gray-200 dark:ring-slate-700 focus:ring-2 focus:ring-primary-500 p-1.5 md:p-2 outline-none max-w-[100px] xs:max-w-[150px] md:max-w-xs truncate flex-shrink-0">
-                        <option value="groq/llama-3.3-70b-versatile">Groq: Llama 3 70B</option>
-                        <option value="openai/gpt-4-turbo">OpenAI: GPT-4 Turbo</option>
-                        <option value="anthropic/claude-3-5-sonnet-20240620">Claude 3.5 Sonnet</option>
-                        <option value="cohere/command-r-plus">Cohere: Command R+</option>
+                        class="bg-transparent text-gray-800 dark:text-white text-sm md:text-base font-bold border-none focus:ring-0 p-1 outline-none appearance-none text-center cursor-pointer">
+                        <option value="groq/llama-3.3-70b-versatile">NexRetriever 1.0</option>
+                        <option value="openai/gpt-4-turbo">GPT-4 Turbo</option>
+                        <option value="anthropic/claude-3-5-sonnet-20240620">Claude 3.5</option>
+                        <option value="cohere/command-r-plus">Command R+</option>
                     </select>
+                    <i class="fas fa-chevron-down text-[10px] text-gray-400"></i>
+                </div>
+
+                <div class="flex items-center gap-1 md:gap-3">
+                    <button id="mobile-new-chat-btn" class="p-2 text-gray-500 hover:text-primary-600 md:hidden">
+                        <i class="far fa-edit text-lg"></i>
+                    </button>
+                    <!-- Settings/Options Button (To hide the messy toggles) -->
+                    <button id="header-settings-btn" class="p-2 text-gray-500 hover:text-primary-600">
+                        <i class="fas fa-ellipsis-h text-lg"></i>
+                    </button>
                 </div>
             </header>
 
@@ -162,35 +143,42 @@
                 </div>
             </div>
 
-            <!-- Input Area -->
-            <div class="p-2 sm:p-4 md:p-8 bg-transparent">
-                <div class="max-w-4xl mx-auto relative group">
-                    <div
-                        class="absolute -inset-1 bg-gradient-to-r from-primary-600 to-indigo-600 rounded-2xl blur opacity-20 group-focus-within:opacity-40 transition duration-1000">
+            <!-- Floating Scroll to Bottom Button (Mobile) -->
+            <button id="scroll-bottom-btn"
+                class="fixed bottom-24 right-4 w-10 h-10 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-full flex items-center justify-center text-gray-500 shadow-lg transition-all opacity-0 pointer-events-none z-20">
+                <i class="fas fa-arrow-down"></i>
+            </button>
+
+            <!-- Input Area (Sleek ChatGPT Pill) -->
+            <div class="px-3 pb-4 md:px-8 md:pb-8 bg-transparent">
+                <div class="max-w-4xl mx-auto">
+                    <div id="sources-preview"
+                        class="hidden px-4 py-2 bg-gray-50 dark:bg-slate-800/50 rounded-t-2xl border-x border-t border-gray-200 dark:border-slate-800 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                        <span
+                            class="text-[10px] font-bold text-primary-500 uppercase tracking-wider whitespace-nowrap">Context:</span>
+                        <div id="active-sources" class="flex gap-2"></div>
                     </div>
                     <div
-                        class="relative bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
-                        <div id="sources-preview"
-                            class="hidden px-4 py-2 bg-gray-50 dark:bg-slate-800/50 border-b border-gray-100 dark:border-slate-800 flex items-center gap-2 overflow-x-auto">
-                            <span
-                                class="text-xs font-semibold text-primary-500 uppercase tracking-wider whitespace-nowrap">Referring
-                                Documents:</span>
-                            <div id="active-sources" class="flex gap-2"></div>
-                        </div>
-                        <div class="flex items-end p-2 gap-2">
-                            <textarea id="chat-input" rows="1" placeholder="Ask anything..."
-                                class="flex-1 bg-transparent border-none focus:ring-0 text-gray-700 dark:text-slate-200 p-3 resize-none max-h-48 custom-scrollbar placeholder-gray-400 dark:placeholder-slate-500 text-sm md:text-base"></textarea>
+                        class="relative bg-gray-100 dark:bg-slate-900 border-none rounded-[28px] overflow-hidden flex items-end p-1.5 gap-1 shadow-sm transition-all focus-within:ring-1 focus-within:ring-primary-500/50">
+                        <button id="mobile-upload-btn"
+                            class="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-primary-600 flex-shrink-0">
+                            <i class="fas fa-plus text-lg"></i>
+                        </button>
+                        <textarea id="chat-input" rows="1" placeholder="Ask anything..."
+                            class="flex-1 bg-transparent border-none focus:ring-0 text-gray-700 dark:text-slate-200 py-2 px-1 resize-none max-h-48 custom-scrollbar placeholder-gray-400 dark:placeholder-slate-500 text-sm md:text-base"></textarea>
+
+                        <div class="flex items-center">
+                            <button id="mic-btn"
+                                class="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-primary-500 flex-shrink-0">
+                                <i class="fas fa-microphone text-lg"></i>
+                            </button>
                             <button id="send-btn"
-                                class="w-10 h-10 md:w-12 md:h-12 bg-primary-600 hover:bg-primary-700 text-white rounded-xl flex items-center justify-center transition-all shadow-lg hover:shadow-primary-500/25 active:scale-90 disabled:opacity-50 disabled:scale-100 flex-shrink-0"
+                                class="w-10 h-10 bg-gray-200 dark:bg-slate-800 text-gray-400 dark:text-slate-600 rounded-full flex items-center justify-center transition-all disabled:opacity-50 flex-shrink-0 ml-1"
                                 disabled>
-                                <i class="fas fa-paper-plane"></i>
+                                <i class="fas fa-arrow-up text-lg"></i>
                             </button>
                         </div>
                     </div>
-                    <p
-                        class="text-center mt-3 text-[10px] md:text-xs text-gray-400 dark:text-slate-600 hidden sm:block">
-                        NexRetriever can extract insights from complex documents. Powered by FAISS & Groq.
-                    </p>
                 </div>
             </div>
         </main>
