@@ -91,6 +91,8 @@ async function init() {
             if (response.ok) {
                 data = await response.json();
             } else {
+                const err = await response.json().catch(() => ({}));
+                notify(`Session error: ${err.error || response.statusText}`, 'error');
                 storage.remove('sessionId');
                 const newRes = await fetch('/api/session');
                 data = await newRes.json();
@@ -222,7 +224,10 @@ async function loadSessionHistory() {
     if (!sessionList) return;
     try {
         const response = await fetch('/api/history');
-        if (!response.ok) return;
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || `Server error ${response.status}`);
+        }
         const sessions = await response.json();
 
         sessionList.innerHTML = '';

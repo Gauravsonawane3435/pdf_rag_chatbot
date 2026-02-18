@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 # --- Database Setup ---
 DATABASE_URL = Config.SQLALCHEMY_DATABASE_URI
 is_postgres = DATABASE_URL.startswith("postgresql")
+# Masked URL for logging
+masked_url = DATABASE_URL.split('@')[-1] if '@' in DATABASE_URL else DATABASE_URL
+logger.info(f"[DB] Using database: {masked_url}")
 
 try:
     if is_postgres:
