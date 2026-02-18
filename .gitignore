@@ -27,3 +27,7 @@ instance/
 # OS
 .DS_Store
 Thumbs.db
+
+# Frontend
+node_modules/
+!static/dist/

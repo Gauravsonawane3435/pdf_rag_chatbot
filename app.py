@@ -98,6 +98,13 @@ app.add_middleware(
 
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
+@app.middleware("http")
+async def force_https_scheme(request: Request, call_next):
+    # Railway/Render pass X-Forwarded-Proto. If it's https, ensure the scope reflects it.
+    if request.headers.get("x-forwarded-proto") == "https":
+        request.scope["scheme"] = "https"
+    return await call_next(request)
+
 # Static files and Templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
