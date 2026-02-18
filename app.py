@@ -98,13 +98,6 @@ app.add_middleware(
 
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
-@app.middleware("http")
-async def force_https_scheme(request: Request, call_next):
-    # Railway/Render pass X-Forwarded-Proto. If it's https, ensure the scope reflects it.
-    if request.headers.get("x-forwarded-proto") == "https":
-        request.scope["scheme"] = "https"
-    return await call_next(request)
-
 # Static files and Templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -226,26 +219,30 @@ async def chat(request: Request, db: Session = Depends(get_db)):
     if cached_res:
         return cached_res
         
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
-    if not session:
-        # Create session if it doesn't exist yet
-        session = ChatSession(id=session_id)
-        db.add(session)
-        db.commit()
-        db.refresh(session)
-
-    vector_store = rag_service.get_vector_store(session_id)
-    
-    if not vector_store:
-        return {"answer": "Please upload documents first.", "sources": []}
-        
-    llm = LLMService.get_llm(provider, model)
-    retriever = rag_service.get_retriever(vector_store, llm, session_id, use_hybrid=True)
-    rag_chain = rag_service.get_rag_chain(llm, retriever)
-    
-    chat_history = rag_service.format_chat_history(session.messages[-10:])
-    
     try:
+        session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+        if not session:
+            logger.info(f"Creating new session for ID: {session_id}")
+            session = ChatSession(id=session_id)
+            db.add(session)
+            db.commit()
+            db.refresh(session)
+
+        vector_store = rag_service.get_vector_store(session_id)
+        if not vector_store:
+            return {"answer": "I couldn't find any documents for this session. Please re-upload your files.", "sources": []}
+            
+        llm = LLMService.get_llm(provider, model)
+        if not llm:
+            return {"answer": "Chat service is temporarily unavailable. Check API keys.", "sources": []}
+
+        retriever = rag_service.get_retriever(vector_store, llm, session_id, use_hybrid=True)
+        rag_chain = rag_service.get_rag_chain(llm, retriever)
+        
+        # Limit history to prevent context overflow in small models
+        chat_history = rag_service.format_chat_history(session.messages[-6:])
+        
+        logger.info(f"Invoking RAG chain for session {session_id}")
         response = rag_chain.invoke({
             "input": question,
             "chat_history": chat_history
@@ -264,9 +261,7 @@ async def chat(request: Request, db: Session = Depends(get_db)):
         user_msg = Message(session_id=session_id, sender='user', content=question)
         bot_msg = Message(session_id=session_id, sender='bot', content=answer, sources=unique_sources)
         
-        # Update session timestamp
         session.updated_at = datetime.utcnow()
-        
         db.add(user_msg)
         db.add(bot_msg)
         
@@ -283,11 +278,15 @@ async def chat(request: Request, db: Session = Depends(get_db)):
         
         res = {"answer": answer, "sources": unique_sources}
         cache_service.set(session_id, question, res)
-        
         return res
+
     except Exception as e:
+        logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal server error", "detail": str(e)}
+        )
 
 @app.post("/api/chat-stream")
 async def chat_stream(request: Request, db: Session = Depends(get_db)):
@@ -300,63 +299,66 @@ async def chat_stream(request: Request, db: Session = Depends(get_db)):
     if not session_id or not question:
         raise HTTPException(status_code=400, detail="Session ID and question are required")
 
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
-    if not session:
-        # Create session if it doesn't exist yet
-        session = ChatSession(id=session_id)
-        db.add(session)
-        db.commit()
-        db.refresh(session)
-        
-    vector_store = rag_service.get_vector_store(session_id)
-    
-    if not vector_store:
-        async def err_gen():
-            yield f"data: {json.dumps({'token': 'Please upload documents first.'})}\n\n"
-        return StreamingResponse(err_gen(), media_type="text/event-stream")
+    try:
+        session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+        if not session:
+            session = ChatSession(id=session_id)
+            db.add(session)
+            db.commit()
+            db.refresh(session)
+            
+        vector_store = rag_service.get_vector_store(session_id)
+        if not vector_store:
+            async def err_gen():
+                yield f"data: {json.dumps({'token': 'Please upload documents first.'})}\n\n"
+                yield f"data: {json.dumps({'done': True})}\n\n"
+            return StreamingResponse(err_gen(), media_type="text/event-stream")
 
-    llm = LLMService.get_llm(provider, model)
-    retriever = rag_service.get_retriever(vector_store, llm, session_id, use_hybrid=True)
-    rag_chain = rag_service.get_rag_chain(llm, retriever)
-    chat_history = rag_service.format_chat_history(session.messages[-10:])
+        llm = LLMService.get_llm(provider, model)
+        retriever = rag_service.get_retriever(vector_store, llm, session_id, use_hybrid=True)
+        rag_chain = rag_service.get_rag_chain(llm, retriever)
+        chat_history = rag_service.format_chat_history(session.messages[-6:])
 
-    async def generate():
-        full_answer = ""
-        sources = []
-        try:
-            for chunk in rag_chain.stream({"input": question, "chat_history": chat_history}):
-                if "answer" in chunk:
-                    ans_part = chunk["answer"]
-                    full_answer += ans_part
-                    yield f"data: {json.dumps({'token': ans_part})}\n\n"
+        async def generate():
+            full_answer = ""
+            sources = []
+            try:
+                # Use synchronous stream in a wrapper or handle chunks
+                for chunk in rag_chain.stream({"input": question, "chat_history": chat_history}):
+                    if "answer" in chunk:
+                        ans_part = chunk["answer"]
+                        full_answer += ans_part
+                        yield f"data: {json.dumps({'token': ans_part})}\n\n"
+                    
+                    if "context" in chunk and not sources:
+                        for doc in chunk["context"]:
+                            sources.append({
+                                "filename": os.path.basename(doc.metadata.get("source", "Unknown")),
+                                "page": doc.metadata.get("page", 1)
+                            })
                 
-                if "context" in chunk and not sources:
-                    for doc in chunk["context"]:
-                        sources.append({
-                            "filename": os.path.basename(doc.metadata.get("source", "Unknown")),
-                            "page": doc.metadata.get("page", 1)
-                        })
-            
-            unique_sources = list({f"{s['filename']}_{s['page']}": s for s in sources}.values())
-            
-            # Use a fresh session for the background write
-            with SessionLocal() as background_db:
-                # Update session timestamp
-                bg_session = background_db.query(ChatSession).filter(ChatSession.id == session_id).first()
-                if bg_session:
-                    bg_session.updated_at = datetime.utcnow()
+                unique_sources = list({f"{s['filename']}_{s['page']}": s for s in sources}.values())
                 
-                user_msg = Message(session_id=session_id, sender='user', content=question)
-                bot_msg = Message(session_id=session_id, sender='bot', content=full_answer, sources=unique_sources)
-                background_db.add(user_msg)
-                background_db.add(bot_msg)
-                background_db.commit()
-            
-            yield f"data: {json.dumps({'done': True, 'sources': unique_sources})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                with SessionLocal() as background_db:
+                    bg_session = background_db.query(ChatSession).filter(ChatSession.id == session_id).first()
+                    if bg_session:
+                        bg_session.updated_at = datetime.utcnow()
+                    
+                    user_msg = Message(session_id=session_id, sender='user', content=question)
+                    bot_msg = Message(session_id=session_id, sender='bot', content=full_answer, sources=unique_sources)
+                    background_db.add(user_msg)
+                    background_db.add(bot_msg)
+                    background_db.commit()
+                
+                yield f"data: {json.dumps({'done': True, 'sources': unique_sources})}\n\n"
+            except Exception as e:
+                logger.error(f"Error in streaming generation: {str(e)}", exc_info=True)
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
-    return StreamingResponse(generate(), media_type="text/event-stream")
+        return StreamingResponse(generate(), media_type="text/event-stream")
+    except Exception as e:
+        logger.error(f"Error starting chat stream: {str(e)}", exc_info=True)
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.get("/api/analytics")
 async def get_analytics(session_id: str, db: Session = Depends(get_db)):

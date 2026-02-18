@@ -352,6 +352,10 @@ async function handleStreamingChat(text) {
                 model: currentModel
             })
         });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || `Server returned ${response.status}`);
+        }
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         while (true) {
@@ -379,7 +383,7 @@ async function handleStreamingChat(text) {
             }
         }
     } catch (e) {
-        if (contentDiv) contentDiv.innerHTML = 'Failed to connect to streaming server.';
+        if (contentDiv) contentDiv.innerHTML = `<div class="text-red-500">Error: ${e.message || 'Failed to connect to streaming server.'}</div>`;
     } finally {
         if (sendBtn) sendBtn.disabled = false;
     }

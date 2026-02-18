@@ -71,9 +71,13 @@ class RAGService:
         """Load documents cache for BM25."""
         cache_path = f"{self.vector_store_path}_{session_id}_docs.pkl"
         if os.path.exists(cache_path):
-            with open(cache_path, 'rb') as f:
-                self.documents_cache[session_id] = pickle.load(f)
-                return self.documents_cache[session_id]
+            try:
+                with open(cache_path, 'rb') as f:
+                    self.documents_cache[session_id] = pickle.load(f)
+                    return self.documents_cache[session_id]
+            except Exception as e:
+                print(f"Error loading document cache: {e}")
+                return []
         return []
     
     def remove_session_cache(self, session_id):
