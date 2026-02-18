@@ -217,7 +217,8 @@ function setupEventListeners() {
 
             clearChatUI(needsNewSession ? "New session started. Ready for your documents." : "This is already a new session.");
             loadSessionHistory();
-            if (window.innerWidth < 768) closeSidebar();
+            // Automatically close sidebar on mobile after switching/starting session
+            if (window.innerWidth < 1024) closeSidebar();
         });
     }
 }
@@ -262,7 +263,7 @@ async function loadSessionHistory() {
         });
     } catch (e) {
         console.error('Failed to load session history:', e);
-        notify(`Failed to load history: ${e.message}`, 'error');
+        // Don't annoy with alerts for history fetch failures on init unless explicit
     }
 }
 
@@ -416,7 +417,7 @@ function createBotMessageShell() {
         </div>
     `;
     chatMessages.appendChild(div);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    div.scrollIntoView({ behavior: 'smooth', block: 'end' });
     return div;
 }
 
@@ -505,7 +506,7 @@ function appendMessage(sender, content, sources = []) {
         </div>
     `;
     chatMessages.appendChild(div);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    div.scrollIntoView({ behavior: 'smooth', block: 'end' });
 }
 
 function appendTypingIndicator() {

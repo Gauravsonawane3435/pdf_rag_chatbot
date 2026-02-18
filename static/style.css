@@ -167,6 +167,14 @@
     border-bottom-right-radius: 4px;
 }
 
+.delete-session-btn {
+    min-width: 40px;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .chat-bubble-bot {
     border-bottom-left-radius: 4px;
 }
@@ -218,18 +226,14 @@
     .chat-bubble-user,
     .chat-bubble-bot {
         padding: 0.75rem !important;
+        max-width: 100% !important;
     }
 
     /* Sidebars on mobile */
     #sidebar {
         width: 100% !important;
         max-width: 300px;
-    }
-
-    /* Input box width on mobile */
-    .chat-bubble-user,
-    .chat-bubble-bot {
-        max-width: 95% !important;
+        box-shadow: 20px 0 50px rgba(0, 0, 0, 0.1);
     }
 
     /* Prevent text zooming on iOS */
@@ -240,7 +244,7 @@
     }
 
     #chat-messages {
-        padding: 1rem !important;
+        padding: 0.75rem !important;
     }
 
     /* Make modals easier to use on mobile */
@@ -257,6 +261,15 @@
     #close-pdf-viewer {
         padding: 0.5rem;
     }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 
 /* Ensure modals are scrollable on small screens */
