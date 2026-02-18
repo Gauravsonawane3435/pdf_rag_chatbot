@@ -232,9 +232,21 @@ async def chat(request: Request, db: Session = Depends(get_db)):
         if not vector_store:
             return {"answer": "I couldn't find any documents for this session. Please re-upload your files.", "sources": []}
             
-        llm = LLMService.get_llm(provider, model)
+        llm_provider = provider or 'groq'
+        llm_model = model or 'llama-3.3-70b-versatile'
+        
+        # Diagnostic: Check if API Key exists
+        api_key_name = f"{llm_provider.upper()}_API_KEY"
+        if not os.getenv(api_key_name):
+            logger.error(f"Missing API Key: {api_key_name}")
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Configuration Error: {api_key_name} is not set in the server environment variables."}
+            )
+
+        llm = LLMService.get_llm(llm_provider, llm_model)
         if not llm:
-            return {"answer": "Chat service is temporarily unavailable. Check API keys.", "sources": []}
+            return {"answer": "Chat service is temporarily unavailable. Error initializing LLM.", "sources": []}
 
         retriever = rag_service.get_retriever(vector_store, llm, session_id, use_hybrid=True)
         rag_chain = rag_service.get_rag_chain(llm, retriever)
@@ -314,7 +326,17 @@ async def chat_stream(request: Request, db: Session = Depends(get_db)):
                 yield f"data: {json.dumps({'done': True})}\n\n"
             return StreamingResponse(err_gen(), media_type="text/event-stream")
 
-        llm = LLMService.get_llm(provider, model)
+        llm_provider = provider or 'groq'
+        llm_model = model or 'llama-3.3-70b-versatile'
+        
+        api_key_name = f"{llm_provider.upper()}_API_KEY"
+        if not os.getenv(api_key_name):
+            async def err_gen():
+                yield f"data: {json.dumps({'error': f'Config Error: {api_key_name} missing'})}\n\n"
+                yield f"data: {json.dumps({'done': True})}\n\n"
+            return StreamingResponse(err_gen(), media_type="text/event-stream")
+
+        llm = LLMService.get_llm(llm_provider, llm_model)
         retriever = rag_service.get_retriever(vector_store, llm, session_id, use_hybrid=True)
         rag_chain = rag_service.get_rag_chain(llm, retriever)
         chat_history = rag_service.format_chat_history(session.messages[-6:])
