@@ -34,3 +34,4 @@ pdfplumber
 pdf2image
 tabulate
 markdown
+psycopg2-binary

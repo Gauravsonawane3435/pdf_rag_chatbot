@@ -1,5 +1,6 @@
 import os
 import time
+import logging
 from datetime import datetime
 import json
 import uuid
@@ -18,24 +19,45 @@ from services.llm_service import LLMService
 from services.rag_service import RAGService
 from services.cache_service import CacheService
 
+# Initialize Logger
+logger = logging.getLogger(__name__)
+
 # --- Database Setup ---
 DATABASE_URL = Config.SQLALCHEMY_DATABASE_URI
-if DATABASE_URL.startswith("sqlite"):
-    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-    # Enable foreign keys for SQLite
-    from sqlalchemy import event
-    @event.listens_for(engine, "connect")
-    def set_sqlite_pragma(dbapi_connection, connection_record):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-else:
-    engine = create_engine(DATABASE_URL)
+is_postgres = DATABASE_URL.startswith("postgresql")
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+try:
+    if is_postgres:
+        logger.info(f"[DB] Initializing PostgreSQL engine...")
+        engine = create_engine(
+            DATABASE_URL, 
+            pool_pre_ping=True,
+            pool_size=10,
+            max_overflow=20
+        )
+    else:
+        logger.info(f"[DB] Initializing SQLite engine...")
+        engine = create_engine(
+            DATABASE_URL, 
+            connect_args={"check_same_thread": False}
+        )
+        # Enable foreign keys for SQLite
+        from sqlalchemy import event
+        @event.listens_for(engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    # Create tables
+    Base.metadata.create_all(bind=engine)
+    logger.info("[DB] Database tables verified/created successfully.")
+except Exception as e:
+    logger.critical(f"[DB] Critical error during database initialization: {e}")
+    # In production, we might want to exit if DB fails
+    # sys.exit(1)
 
 # Dependency to get DB session
 def get_db():
@@ -47,6 +69,22 @@ def get_db():
 
 # --- App Setup ---
 app = FastAPI(title="NexRetriever RAG Chatbot")
+
+@app.get("/health")
+async def health_check():
+    """Service health check for production monitoring"""
+    try:
+        # Check DB connection
+        with engine.connect() as conn:
+            from sqlalchemy import text
+            conn.execute(text("SELECT 1"))
+        return {"status": "healthy", "timestamp": datetime.utcnow().isoformat(), "database": "connected"}
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "error": str(e)}
+        )
 
 # CORS
 app.add_middleware(

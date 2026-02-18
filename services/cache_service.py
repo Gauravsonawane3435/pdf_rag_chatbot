@@ -1,23 +1,36 @@
 import redis
 import json
-import os
+import logging
 from hashlib import md5
+from config import Config
+
+logger = logging.getLogger(__name__)
 
 class CacheService:
     def __init__(self):
         self.redis_client = None
+        self.memory_cache = {}
+        
+        # Priority 1: REDIS_URL (Standard for cloud platforms like Render/Railway)
+        redis_url = Config.REDIS_URL
+        
         try:
-            self.redis_client = redis.Redis(
-                host=os.getenv('REDIS_HOST', 'localhost'),
-                port=int(os.getenv('REDIS_PORT', 6379)),
-                password=os.getenv('REDIS_PASSWORD', None),
-                decode_responses=True
-            )
+            if redis_url:
+                self.redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
+            else:
+                self.redis_client = redis.Redis(
+                    host=Config.REDIS_HOST,
+                    port=Config.REDIS_PORT,
+                    password=Config.REDIS_PASSWORD,
+                    decode_responses=True
+                )
+            
             # Test connection
             self.redis_client.ping()
+            logger.info("Connected to Redis cache.")
         except Exception as e:
-            print(f"Redis not available: {e}. Falling back to in-memory cache.")
-            self.memory_cache = {}
+            logger.warning(f"Redis not available ({e}). Falling back to in-memory cache.")
+            self.redis_client = None
 
     def get_cache_key(self, session_id, query):
         query_hash = md5(query.encode()).hexdigest()

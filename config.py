@@ -1,13 +1,28 @@
 import os
+import logging
 from dotenv import load_dotenv
 
-load_dotenv()
+# Force reload from .env to avoid session pollution
+load_dotenv(override=True)
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 class Config:
-    SECRET_KEY = os.getenv('SECRET_KEY', 'dev-key-12345')
+    SECRET_KEY = os.getenv('SECRET_KEY', 'dev-key-very-secret-123')
     UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
     MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///rag_chatbot.db'
+    
+    # Database Configuration
+    DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///rag_chatbot.db')
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    
+    SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # LLM API Keys
@@ -17,6 +32,7 @@ class Config:
     COHERE_API_KEY = os.getenv('COHERE_API_KEY')
     
     # Redis Config
+    REDIS_URL = os.getenv('REDIS_URL', None) # Prefer REDIS_URL if available (Render/Railway standard)
     REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
     REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
     REDIS_PASSWORD = os.getenv('REDIS_PASSWORD', None)
