@@ -1,0 +1,12 @@
+{
+  "name": "pdf-rag-chatbot",
+  "version": "1.0.0",
+  "description": "RAG Chatbot with Tailwind CSS",
+  "main": "index.js",
+  "scripts": {
+    "build:css": "tailwindcss -i ./static/src/input.css -o ./static/dist/output.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.1"
+  }
+}

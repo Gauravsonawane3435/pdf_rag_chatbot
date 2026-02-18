@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from sqlalchemy import create_engine, desc
 from sqlalchemy.orm import sessionmaker, Session
 from models import Base, ChatSession, Message, Document, QueryAnalytics
@@ -94,6 +95,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
 # Static files and Templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
