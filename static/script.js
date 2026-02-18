@@ -32,11 +32,26 @@ function openSidebar() {
 }
 
 function closeSidebar() {
-    sidebar.classList.add('-translate-x-full');
-    sidebarOverlay.classList.add('opacity-0');
-    setTimeout(() => {
-        sidebarOverlay.classList.add('hidden');
-    }, 300);
+    if (sidebar && sidebarOverlay) {
+        sidebar.classList.add('-translate-x-full');
+        sidebarOverlay.classList.add('opacity-0');
+        setTimeout(() => {
+            sidebarOverlay.classList.add('hidden');
+        }, 300);
+    }
+}
+
+function clearChatUI(message = "Upload your documents and let's start a new conversation.") {
+    chatMessages.innerHTML = `
+        <div class="max-w-3xl mx-auto text-center py-12">
+            <div class="w-16 h-16 md:w-20 md:h-20 bg-primary-100 dark:bg-primary-900/30 rounded-3xl flex items-center justify-center text-primary-600 dark:text-primary-400 mx-auto mb-6">
+                <i class="fas fa-robot text-3xl md:text-4xl"></i>
+            </div>
+            <h2 class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white mb-3">Hello! I'm NexRetriever</h2>
+            <p class="text-sm md:text-base text-gray-500 dark:text-slate-400 max-w-md mx-auto">${message}</p>
+        </div>
+    `;
+    docList.innerHTML = '';
 }
 
 // Mobile Sidebar Event Listeners
@@ -54,22 +69,41 @@ if (sidebarOverlay) {
 
 // Initialize
 async function init() {
-    // Always start a new session on load
-    const response = await fetch('/api/session');
-    const data = await response.json();
-    sessionId = data.session_id;
-    localStorage.setItem('sessionId', sessionId);
+    const savedId = localStorage.getItem('sessionId');
+    let data;
 
-    // Initial state is a welcome screen (default in HTML)
-    // No need to load history since it's a new session
+    try {
+        if (savedId) {
+            const response = await fetch(`/api/session?session_id=${savedId}`);
+            if (response.ok) {
+                data = await response.json();
+            } else {
+                // If saved session is gone, get a new one
+                localStorage.removeItem('sessionId'); // Clear localStorage for invalid session
+                const newRes = await fetch('/api/session');
+                data = await newRes.json();
+            }
+        } else {
+            const newRes = await fetch('/api/session');
+            data = await newRes.json();
+        }
 
-    // Load documents (will be empty)
-    loadDocuments();
+        sessionId = data.session_id;
+        localStorage.setItem('sessionId', sessionId);
 
-    // Load session history for the sidebar
-    loadSessionHistory();
+        if (data.history && data.history.length > 0) {
+            chatMessages.innerHTML = '';
+            data.history.forEach(msg => appendMessage(msg.sender, msg.content, msg.sources));
+        } else {
+            clearChatUI();
+        }
 
-    // Theme setup
+        loadDocuments();
+        loadSessionHistory();
+    } catch (e) {
+        console.error("Initialization error:", e);
+    }
+
     if (localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
         document.documentElement.classList.add('dark');
     }
@@ -123,25 +157,32 @@ analyticsBtn.addEventListener('click', showAnalytics);
 closeAnalytics.addEventListener('click', () => analyticsModal.classList.add('hidden'));
 
 newChatBtn.addEventListener('click', async () => {
-    const response = await fetch('/api/session');
-    const data = await response.json();
-    sessionId = data.session_id;
-    localStorage.setItem('sessionId', sessionId);
+    // Check if current session is empty or invalid
+    let needsNewSession = true;
+    try {
+        const histRes = await fetch(`/api/session?session_id=${sessionId}`);
+        if (histRes.ok) {
+            const histData = await histRes.json();
+            const docRes = await fetch(`/api/documents?session_id=${sessionId}`);
+            const docs = await docRes.json();
 
-    // Clear UI
-    chatMessages.innerHTML = `
-        <div class="max-w-3xl mx-auto text-center py-12">
-            <div class="w-16 h-16 md:w-20 md:h-20 bg-primary-100 dark:bg-primary-900/30 rounded-3xl flex items-center justify-center text-primary-600 dark:text-primary-400 mx-auto mb-6">
-                <i class="fas fa-robot text-3xl md:text-4xl"></i>
-            </div>
-            <h2 class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white mb-3">Hello! I'm NexRetriever</h2>
-            <p class="text-sm md:text-base text-gray-500 dark:text-slate-400 max-w-md mx-auto">Upload your documents and let's start a new conversation.</p>
-        </div>
-    `;
-    docList.innerHTML = '';
+            // If it's already an empty session in the DB, we don't need a new record
+            if (docs.length === 0 && (!histData.history || histData.history.length === 0)) {
+                needsNewSession = false;
+            }
+        }
+    } catch (e) { }
+
+    if (needsNewSession) {
+        const response = await fetch('/api/session');
+        const data = await response.json();
+        sessionId = data.session_id;
+        localStorage.setItem('sessionId', sessionId);
+    }
+
+    clearChatUI(needsNewSession ? "New session started. Ready for your documents." : "This is already a new session.");
     loadSessionHistory();
 
-    // Close sidebar on mobile
     if (window.innerWidth < 768) {
         closeSidebar();
     }
@@ -171,7 +212,7 @@ async function loadSessionHistory() {
                     <div class="text-xs font-semibold text-gray-700 dark:text-slate-200 truncate">${s.preview}</div>
                     <div class="text-[10px] text-gray-400 mt-1">${new Date(s.updated_at).toLocaleDateString()}</div>
                 </div>
-                <button class="delete-session-btn opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 transition-all" data-id="${s.id}">
+                <button class="delete-session-btn opacity-40 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 transition-all" data-id="${s.id}" title="Delete Chat">
                     <i class="fas fa-trash-can text-[10px]"></i>
                 </button>
             `;
@@ -202,8 +243,11 @@ async function deleteSession(id) {
 
         if (response.ok) {
             if (id === sessionId) {
-                // If we deleted the current session, start a new one
-                newChatBtn.click();
+                // If we deleted the current session, clean up localStorage
+                localStorage.removeItem('sessionId');
+                sessionId = null;
+                // init will handle creating a new one properly
+                init();
             } else {
                 loadSessionHistory();
             }
@@ -278,6 +322,8 @@ async function handleNormalChat(text) {
             appendMessage('bot', `Error: ${data.error}`);
         } else {
             appendMessage('bot', data.answer, data.sources);
+            // Refresh history to update title if it was "New Chat"
+            loadSessionHistory();
         }
     } catch (e) {
         typingIndicator.remove();
@@ -326,6 +372,8 @@ async function handleStreamingChat(text) {
                         if (data.sources && data.sources.length > 0) {
                             appendSources(botMsgDiv, data.sources);
                         }
+                        // Refresh history to update title
+                        loadSessionHistory();
                     }
 
                     if (data.error) {

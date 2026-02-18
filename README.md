@@ -169,6 +169,14 @@ alpha=0.6  # 0=only BM25, 1=only semantic
 - Ensure documents are being cached properly
 - Check `vector_db_*_docs.pkl` files exist
 
+### Poppler Not Found (Windows)
+**Error:** `Unable to get page count. Is poppler installed and in PATH?`
+1. Download Poppler for Windows from [here](https://github.com/oschwartz10612/poppler-windows/releases/).
+2. Extract the ZIP folder (e.g., to `C:\poppler`).
+3. Add `C:\poppler\Library\bin` to your system PATH.
+4. **Alternative:** Add `POPPLER_PATH=C:\poppler\Library\bin` to your `.env` file.
+5. Restart your terminal/app.
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please:

@@ -20,8 +20,8 @@ class CacheService:
             self.memory_cache = {}
 
     def get_cache_key(self, session_id, query):
-        payload = f"{session_id}:{query}"
-        return md5(payload.encode()).hexdigest()
+        query_hash = md5(query.encode()).hexdigest()
+        return f"rag_cache:{session_id}:{query_hash}"
 
     def get(self, session_id, query):
         key = self.get_cache_key(session_id, query)
@@ -43,3 +43,21 @@ class CacheService:
             except:
                 pass
         self.memory_cache[key] = response
+
+    def clear_session(self, session_id):
+        """Remove all cached items for a specific session."""
+        if self.redis_client:
+            try:
+                # Find all keys for this session
+                pattern = f"rag_cache:{session_id}:*"
+                keys = self.redis_client.keys(pattern)
+                if keys:
+                    self.redis_client.delete(*keys)
+            except Exception as e:
+                print(f"Error clearing Redis cache: {e}")
+        
+        # Clear from memory cache
+        prefix = f"rag_cache:{session_id}:"
+        to_delete = [k for k in self.memory_cache.keys() if k.startswith(prefix)]
+        for k in to_delete:
+            del self.memory_cache[k]

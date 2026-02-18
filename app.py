@@ -1,5 +1,6 @@
 import os
 import time
+from datetime import datetime
 import json
 import uuid
 from typing import List, Optional
@@ -21,6 +22,13 @@ from services.cache_service import CacheService
 DATABASE_URL = Config.SQLALCHEMY_DATABASE_URI
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+    # Enable foreign keys for SQLite
+    from sqlalchemy import event
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 else:
     engine = create_engine(DATABASE_URL)
 
@@ -69,15 +77,13 @@ async def index(request: Request):
 @app.get("/api/session")
 async def get_session(session_id: Optional[str] = None, db: Session = Depends(get_db)):
     if not session_id:
-        new_session = ChatSession()
-        db.add(new_session)
-        db.commit()
-        db.refresh(new_session)
-        return {"session_id": new_session.id, "history": []}
+        # Return a potential ID but DON'T save to DB yet (Lazy creation)
+        return {"session_id": str(uuid.uuid4()), "history": []}
     
     session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        # If ID was provided but not in DB, return a fresh slate
+        return {"session_id": str(uuid.uuid4()), "history": []}
         
     history = [{
         "sender": msg.sender,
@@ -91,11 +97,24 @@ async def get_session(session_id: Optional[str] = None, db: Session = Depends(ge
 @app.get("/api/history")
 async def get_all_sessions(db: Session = Depends(get_db)):
     sessions = db.query(ChatSession).order_by(desc(ChatSession.updated_at)).all()
-    return [{
-        "id": s.id,
-        "updated_at": s.updated_at.isoformat(),
-        "preview": s.messages[0].content[:40] + "..." if s.messages else "New Chat"
-    } for s in sessions]
+    history = []
+    for s in sessions:
+        # Filter: Only show sessions with actual content (messages or documents)
+        if not s.messages and not s.documents:
+            continue
+            
+        # Find the first user message for the title
+        title = "New Chat"
+        user_msgs = [m for m in s.messages if m.sender == 'user']
+        if user_msgs:
+            title = user_msgs[0].content[:45] + ("..." if len(user_msgs[0].content) > 45 else "")
+        
+        history.append({
+            "id": s.id,
+            "updated_at": s.updated_at.isoformat(),
+            "preview": title
+        })
+    return history
 
 @app.post("/api/upload")
 async def upload_files(
@@ -103,8 +122,14 @@ async def upload_files(
     files: List[UploadFile] = File(...),
     db: Session = Depends(get_db)
 ):
+    # Ensure session exists (Lazy creation)
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        session = ChatSession(id=session_id)
+        db.add(session)
+        db.commit()
+
     processed_docs = []
-    
     for file in files:
         if not file.filename:
             continue
@@ -154,6 +179,13 @@ async def chat(request: Request, db: Session = Depends(get_db)):
         return cached_res
         
     session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        # Create session if it doesn't exist yet
+        session = ChatSession(id=session_id)
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+
     vector_store = rag_service.get_vector_store(session_id)
     
     if not vector_store:
@@ -183,6 +215,10 @@ async def chat(request: Request, db: Session = Depends(get_db)):
         
         user_msg = Message(session_id=session_id, sender='user', content=question)
         bot_msg = Message(session_id=session_id, sender='bot', content=answer, sources=unique_sources)
+        
+        # Update session timestamp
+        session.updated_at = datetime.utcnow()
+        
         db.add(user_msg)
         db.add(bot_msg)
         
@@ -217,6 +253,13 @@ async def chat_stream(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Session ID and question are required")
 
     session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        # Create session if it doesn't exist yet
+        session = ChatSession(id=session_id)
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+        
     vector_store = rag_service.get_vector_store(session_id)
     
     if not vector_store:
@@ -250,6 +293,11 @@ async def chat_stream(request: Request, db: Session = Depends(get_db)):
             
             # Use a fresh session for the background write
             with SessionLocal() as background_db:
+                # Update session timestamp
+                bg_session = background_db.query(ChatSession).filter(ChatSession.id == session_id).first()
+                if bg_session:
+                    bg_session.updated_at = datetime.utcnow()
+                
                 user_msg = Message(session_id=session_id, sender='user', content=question)
                 bot_msg = Message(session_id=session_id, sender='bot', content=full_answer, sources=unique_sources)
                 background_db.add(user_msg)
@@ -304,36 +352,76 @@ async def clear_session(request: Request, db: Session = Depends(get_db)):
 async def delete_session(request: Request, db: Session = Depends(get_db)):
     data = await request.json()
     session_id = data.get('session_id')
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+        
     session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    
     if session:
         try:
-            rag_service.remove_session_cache(session_id)
+            print(f"\n[PURGE] Starting permanent deletion for session: {session_id}")
             
-            path = f"{Config.VECTOR_STORE_PATH}_{session_id}"
-            if os.path.exists(path):
+            # 1. PERMANENTLY CLEAR CACHES
+            # Clear in-memory BM25/Document cache
+            rag_service.remove_session_cache(session_id)
+            # Clear Redis/In-memory AI response cache
+            cache_service.clear_session(session_id)
+            print(f"[PURGE] All cache layers cleared for {session_id}")
+            
+            # 2. DELETE PHYSICAL FILES
+            # Extract paths before DB records are gone
+            docs_to_delete = list(session.documents)
+            for doc in docs_to_delete:
+                if doc.file_path and os.path.exists(doc.file_path):
+                    try:
+                        os.remove(doc.file_path)
+                        print(f"[PURGE] Deleted physical file: {doc.file_path}")
+                    except Exception as fe:
+                        print(f"[ERROR] Failed to delete file {doc.file_path}: {fe}")
+            
+            # 3. DATABASE PURGE
+            # We explicitly delete child records first for maximum safety, 
+            # though cascade=all-delete-orphan and ON DELETE CASCADE are active.
+            try:
+                msg_count = db.query(Message).filter(Message.session_id == session_id).delete()
+                doc_count = db.query(Document).filter(Document.session_id == session_id).delete()
+                ana_count = db.query(QueryAnalytics).filter(QueryAnalytics.session_id == session_id).delete()
+                print(f"[PURGE] DB: Removed {msg_count} messages, {doc_count} docs, {ana_count} analytics")
+                
+                db.delete(session)
+                db.commit()
+                print(f"[PURGE] DB: ChatSession {session_id} permanently removed")
+            except Exception as dbe:
+                db.rollback()
+                print(f"[FATAL] Database deletion failed: {dbe}")
+                raise dbe
+            
+            # 4. VECTOR DB CLEANUP (FAISS)
+            vector_path = f"{Config.VECTOR_STORE_PATH}_{session_id}"
+            if os.path.exists(vector_path):
                 import shutil
                 try:
-                    shutil.rmtree(path)
-                except: pass
+                    shutil.rmtree(vector_path, ignore_errors=True)
+                    print(f"[PURGE] Filesystem: Vector folder deleted: {vector_path}")
+                except Exception as ve:
+                    print(f"[ERROR] Failed to delete vector folder {vector_path}: {ve}")
 
-            cache_path = f"{Config.VECTOR_STORE_PATH}_{session_id}_docs.pkl"
-            if os.path.exists(cache_path):
-                try: os.remove(cache_path)
-                except: pass
+            # 5. KEYWORD INDEX CLEANUP (BM25)
+            bm25_cache_path = f"{Config.VECTOR_STORE_PATH}_{session_id}_docs.pkl"
+            if os.path.exists(bm25_cache_path):
+                try:
+                    os.remove(bm25_cache_path)
+                    print(f"[PURGE] Filesystem: BM25 index deleted: {bm25_cache_path}")
+                except Exception as ce:
+                    print(f"[ERROR] Failed to delete BM25 cache {bm25_cache_path}: {ce}")
+                
+            return {"status": "success", "message": f"Session {session_id} purged from all storage layers"}
             
-            for doc in session.documents:
-                if doc.file_path and os.path.exists(doc.file_path):
-                    try: os.remove(doc.file_path)
-                    except: pass
-                    
-            db.delete(session)
-            db.commit()
-            return {"message": "Session deleted successfully"}
         except Exception as e:
-            db.rollback()
-            raise HTTPException(status_code=500, detail=str(e))
+            print(f"[FATAL ERROR] Total Purge Failure: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Critical error during permanent deletion: {str(e)}")
     
-    raise HTTPException(status_code=404, detail="Session not found")
+    raise HTTPException(status_code=404, detail="Session not found in Database")
 
 @app.get("/api/view-pdf/{session_id}/{filename}")
 async def view_pdf(session_id: str, filename: str):
@@ -346,5 +434,8 @@ async def view_pdf(session_id: str, filename: str):
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Use 127.0.0.1 instead of 0.0.0.0 for local runs so the URL is clickable
+    host = "127.0.0.1" if not os.environ.get("PORT") else "0.0.0.0"
+    print(f"Server starting on http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port)
 

@@ -21,7 +21,7 @@ class Message(Base):
     __tablename__ = 'message'
     
     id = Column(Integer, primary_key=True)
-    session_id = Column(String(36), ForeignKey('chat_session.id'), nullable=False)
+    session_id = Column(String(36), ForeignKey('chat_session.id', ondelete="CASCADE"), nullable=False)
     sender = Column(String(10), nullable=False)  # 'user' or 'bot'
     content = Column(Text, nullable=False)
     sources = Column(JSON, nullable=True)  # Store source docs/pages
@@ -33,7 +33,7 @@ class Document(Base):
     __tablename__ = 'document'
     
     id = Column(Integer, primary_key=True)
-    session_id = Column(String(36), ForeignKey('chat_session.id'), nullable=False)
+    session_id = Column(String(36), ForeignKey('chat_session.id', ondelete="CASCADE"), nullable=False)
     filename = Column(String(255), nullable=False)
     file_path = Column(String(512), nullable=False)
     file_type = Column(String(50))
@@ -45,7 +45,7 @@ class QueryAnalytics(Base):
     __tablename__ = 'query_analytics'
     
     id = Column(Integer, primary_key=True)
-    session_id = Column(String(36), ForeignKey('chat_session.id'), nullable=False)
+    session_id = Column(String(36), ForeignKey('chat_session.id', ondelete="CASCADE"), nullable=False)
     query = Column(Text)
     response_time = Column(Float)  # in seconds
     num_sources = Column(Integer)

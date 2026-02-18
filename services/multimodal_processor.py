@@ -28,6 +28,7 @@ class MultiModalProcessor:
     def __init__(self, groq_api_key: str = None):
         """Initialize with optional Groq API for vision analysis."""
         self.groq_api_key = groq_api_key
+        self.poppler_path = os.getenv('POPPLER_PATH')
         if groq_api_key:
             # Groq now supports Llama 3.2 Vision models (free!)
             self.vision_llm = ChatGroq(
@@ -122,7 +123,10 @@ class MultiModalProcessor:
         
         try:
             # Convert PDF pages to images
-            images = convert_from_path(file_path, dpi=150)
+            if self.poppler_path:
+                images = convert_from_path(file_path, dpi=150, poppler_path=self.poppler_path)
+            else:
+                images = convert_from_path(file_path, dpi=150)
             
             for page_num, img in enumerate(images, start=1):
                 # Check if page has significant visual content (not just text)
