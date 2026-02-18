@@ -3,6 +3,12 @@
     --primary-dark: #0284c7;
 }
 
+/* Use dynamic viewport height for mobile browsers */
+#app {
+    height: 100vh;
+    height: 100dvh;
+}
+
 .custom-scrollbar::-webkit-scrollbar {
     width: 5px;
 }
@@ -45,11 +51,12 @@
 .glass {
     background: rgba(255, 255, 255, 0.7);
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .dark .glass {
-    background: rgba(15, 23, 42, 0.8);
+    background: rgba(15, 23, 42, 0.85);
     border: 1px solid rgba(30, 41, 59, 0.5);
 }
 
@@ -79,22 +86,26 @@
     0%,
     100% {
         transform: translateY(0);
+        opacity: 0.5;
     }
 
     50% {
         transform: translateY(-4px);
+        opacity: 1;
     }
 }
 
 /* Markdown Styling */
 .prose {
     max-width: none;
+    line-height: 1.6;
 }
 
 .prose h1,
 .prose h2,
 .prose h3 {
     letter-spacing: -0.02em;
+    font-weight: 700;
 }
 
 .prose pre {
@@ -104,6 +115,7 @@
     overflow-x: auto;
     margin: 1.5rem 0;
     border: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.85rem;
 }
 
 .prose code {
@@ -113,6 +125,7 @@
     border-radius: 0.25rem;
     font-size: 0.875em;
     font-weight: 500;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .prose p {
@@ -134,11 +147,19 @@
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s;
 }
 
 .dark .source-tag {
     background: #1e293b;
     color: #94a3b8;
+    border-color: #334155;
+}
+
+.source-tag:hover {
+    background: #e2e8f0;
+    border-color: var(--primary);
 }
 
 /* Chat Bubbles */
@@ -178,7 +199,7 @@
     transition: opacity 0.3s ease-in-out;
 }
 
-/* Responsive Improvements */
+/* Touch Device Optimizations */
 @media (max-width: 768px) {
 
     /* Improve touch targets on mobile */
@@ -199,11 +220,42 @@
         padding: 0.75rem !important;
     }
 
+    /* Sidebars on mobile */
+    #sidebar {
+        width: 100% !important;
+        max-width: 300px;
+    }
+
+    /* Input box width on mobile */
+    .chat-bubble-user,
+    .chat-bubble-bot {
+        max-width: 95% !important;
+    }
+
     /* Prevent text zooming on iOS */
     input,
     textarea,
     select {
         font-size: 16px !important;
+    }
+
+    #chat-messages {
+        padding: 1rem !important;
+    }
+
+    /* Make modals easier to use on mobile */
+    #analytics-modal>div,
+    #pdf-viewer-modal>div {
+        width: 100% !important;
+        height: 100% !important;
+        max-width: none !important;
+        max-height: none !important;
+        border-radius: 0 !important;
+    }
+
+    #close-analytics,
+    #close-pdf-viewer {
+        padding: 0.5rem;
     }
 }
 

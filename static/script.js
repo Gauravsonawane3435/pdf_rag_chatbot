@@ -38,6 +38,8 @@ const mobileMenuBtn = document.getElementById('mobile-menu-btn');
 const closeSidebarBtn = document.getElementById('close-sidebar-btn');
 const sidebar = document.getElementById('sidebar');
 const sidebarOverlay = document.getElementById('sidebar-overlay');
+const visionToggle = document.getElementById('vision-toggle');
+
 
 // Feedback Utility
 function notify(msg, type = 'info') {
@@ -418,7 +420,6 @@ function createBotMessageShell() {
     return div;
 }
 
-const visionToggle = document.getElementById('vision-toggle');
 
 async function handleFileUpload(e) {
 

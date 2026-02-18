@@ -179,6 +179,7 @@ async def upload_files(
     db: Session = Depends(get_db)
 ):
 
+
     try:
         # Ensure session exists (Lazy creation)
         session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
@@ -235,7 +236,7 @@ def process_document_background(session_id: str, file_path: str, use_vision: boo
     try:
         logger.info(f"[Background] Starting processing for {file_path} (Vision: {use_vision})")
         # Process file content (heavy operation)
-        docs = DocumentProcessor.process_file(file_path, use_multimodal=use_vision)
+        docs = DocumentProcessor.process_file(file_path, use_vision=use_vision)
         
         # Add to RAG service (heavy operation: embedding)
         rag_service.add_documents(session_id, docs)
@@ -274,7 +275,25 @@ async def chat(request: Request, db: Session = Depends(get_db)):
 
         vector_store = rag_service.get_vector_store(session_id)
         if not vector_store:
-            return {"answer": "I couldn't find any documents for this session. Please re-upload your files.", "sources": []}
+            # --- Self-Healing Logic ---
+            # Check if DB says we should have documents
+            db_docs = db.query(Document).filter(Document.session_id == session_id).all()
+            if db_docs:
+                logger.info(f"Self-healing: Re-processing {len(db_docs)} documents for session {session_id}")
+                all_lc_docs = []
+                for d_record in db_docs:
+                    if os.path.exists(d_record.file_path):
+                        try:
+                            file_lc_docs = DocumentProcessor.process_file(d_record.file_path)
+                            all_lc_docs.extend(file_lc_docs)
+                        except Exception as pe:
+                            logger.error(f"Failed to re-process {d_record.filename}: {pe}")
+                
+                if all_lc_docs:
+                    vector_store = rag_service.add_documents(session_id, all_lc_docs)
+            
+            if not vector_store:
+                return {"answer": "I couldn't find the searchable index for your documents. This usually happens after a server restart. Please try re-uploading your files to restore the connection.", "sources": []}
             
         llm_provider = provider or 'groq'
         llm_model = model or 'llama-3.3-70b-versatile'
@@ -365,8 +384,25 @@ async def chat_stream(request: Request, db: Session = Depends(get_db)):
             
         vector_store = rag_service.get_vector_store(session_id)
         if not vector_store:
+            # --- Self-Healing Logic for Streaming ---
+            db_docs = db.query(Document).filter(Document.session_id == session_id).all()
+            if db_docs:
+                logger.info(f"Self-healing (Stream): Re-processing {len(db_docs)} documents for {session_id}")
+                all_lc_docs = []
+                for d_record in db_docs:
+                    if os.path.exists(d_record.file_path):
+                        try:
+                            file_lc_docs = DocumentProcessor.process_file(d_record.file_path)
+                            all_lc_docs.extend(file_lc_docs)
+                        except Exception as pe:
+                            logger.error(f"Failed to re-process {d_record.filename}: {pe}")
+                if all_lc_docs:
+                    vector_store = rag_service.add_documents(session_id, all_lc_docs)
+
+        if not vector_store:
             async def err_gen():
-                yield f"data: {json.dumps({'token': 'Please upload documents first.'})}\n\n"
+                msg = "I couldn't find the searchable index for your documents. Please try re-uploading your files."
+                yield f"data: {json.dumps({'token': msg})}\n\n"
                 yield f"data: {json.dumps({'done': True})}\n\n"
             return StreamingResponse(err_gen(), media_type="text/event-stream")
 

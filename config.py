@@ -41,6 +41,6 @@ class Config:
     EMBEDDING_MODEL = "all-MiniLM-L6-v2"
     CHUNK_SIZE = 1000
     CHUNK_OVERLAP = 200
-    VECTOR_STORE_PATH = "vector_db"
+    VECTOR_STORE_PATH = os.path.join(os.getcwd(), "vector_db")
 
 os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)

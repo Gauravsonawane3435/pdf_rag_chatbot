@@ -33,23 +33,36 @@ class RAGService:
 
     def get_vector_store(self, session_id):
         save_path = f"{self.vector_store_path}_{session_id}"
+        print(f"[RAG] Attempting to load vector store from: {save_path}")
         if os.path.exists(save_path):
-            return FAISS.load_local(save_path, self.embeddings, allow_dangerous_deserialization=True)
+            try:
+                store = FAISS.load_local(save_path, self.embeddings, allow_dangerous_deserialization=True)
+                print(f"[RAG] Successfully loaded vector store for {session_id}")
+                return store
+            except Exception as e:
+                print(f"[RAG] Error loading FAISS index: {e}")
+                return None
+        print(f"[RAG] Vector store path does not exist: {save_path}")
         return None
 
     def add_documents(self, session_id, documents):
+        print(f"[RAG] Adding {len(documents)} documents for session {session_id}")
         chunks = self.text_splitter.split_documents(documents)
         if not chunks:
+            print("[RAG] No chunks generated from documents.")
             return None
             
         vector_store = self.get_vector_store(session_id)
         if vector_store:
+            print(f"[RAG] Updating existing vector store with {len(chunks)} chunks")
             vector_store.add_documents(chunks)
         else:
+            print(f"[RAG] Creating new FAISS index from {len(chunks)} chunks")
             vector_store = FAISS.from_documents(chunks, self.embeddings)
             
         save_path = f"{self.vector_store_path}_{session_id}"
         vector_store.save_local(save_path)
+        print(f"[RAG] Vector store saved to: {save_path}")
         
         # Cache all documents for BM25 hybrid search
         if session_id not in self.documents_cache:

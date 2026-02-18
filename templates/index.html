@@ -111,14 +111,15 @@
                 </div>
 
                 <div class="flex items-center gap-2 md:gap-3">
-                    <!-- Vision Toggle (Kept for performance) -->
+                    <!-- Vision Toggle (Keep for performance) -->
                     <div
-                        class="flex items-center gap-2 mr-2 bg-gray-50 dark:bg-slate-800 p-2 rounded-lg ring-1 ring-gray-200 dark:ring-slate-700">
-                        <span class="text-xs font-semibold text-gray-500 dark:text-slate-400">Vision</span>
+                        class="flex items-center gap-2 mr-2 md:mr-4 bg-gray-50 dark:bg-slate-800 p-2 rounded-lg ring-1 ring-gray-200 dark:ring-slate-700">
+                        <span
+                            class="text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden xs:inline">Vision</span>
                         <label class="relative inline-flex items-center cursor-pointer">
                             <input type="checkbox" id="vision-toggle" class="sr-only peer">
                             <div
-                                class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600">
+                                class="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-600">
                             </div>
                         </label>
                     </div>
@@ -138,6 +139,7 @@
                         <option value="groq/llama-3.3-70b-versatile">Groq: Llama 3 70B</option>
                         <option value="openai/gpt-4-turbo">OpenAI: GPT-4 Turbo</option>
                         <option value="anthropic/claude-3-5-sonnet-20240620">Claude 3.5 Sonnet</option>
+                        <option value="cohere/command-r-plus">Cohere: Command R+</option>
                     </select>
                 </div>
             </header>
@@ -190,6 +192,7 @@
                 </div>
             </div>
         </main>
+
 
 
         <!-- Analytics Modal -->
