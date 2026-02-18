@@ -172,12 +172,13 @@ async def get_all_sessions(db: Session = Depends(get_db)):
 
 @app.post("/api/upload")
 async def upload_files(
+    background_tasks: BackgroundTasks,
     session_id: str = Form(...),
     use_vision: str = Form("false"),  # Form data comes as string
     files: List[UploadFile] = File(...),
-    db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = Depends(BackgroundTasks)
+    db: Session = Depends(get_db)
 ):
+
     try:
         # Ensure session exists (Lazy creation)
         session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
@@ -234,7 +235,7 @@ def process_document_background(session_id: str, file_path: str, use_vision: boo
     try:
         logger.info(f"[Background] Starting processing for {file_path} (Vision: {use_vision})")
         # Process file content (heavy operation)
-        docs = DocumentProcessor.process_file(file_path, use_multimodal=use_vision)
+        docs = DocumentProcessor.process_file(file_path, use_vision=use_vision)
         
         # Add to RAG service (heavy operation: embedding)
         rag_service.add_documents(session_id, docs)
@@ -242,6 +243,7 @@ def process_document_background(session_id: str, file_path: str, use_vision: boo
         logger.info(f"[Background] Completed processing for {file_path}")
     except Exception as e:
         logger.error(f"[Background] Error processing {file_path}: {e}")
+
 
 
 @app.post("/api/chat")
