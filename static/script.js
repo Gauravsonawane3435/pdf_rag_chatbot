@@ -42,6 +42,10 @@ const sidebarOverlay = document.getElementById('sidebar-overlay');
 // Feedback Utility
 function notify(msg, type = 'info') {
     console.log(`[${type}] ${msg}`);
+    if (type === 'error') {
+        // Just a simple alert for now for maximum visibility in debugging
+        alert(`Error: ${msg}`);
+    }
 }
 
 // Mobile Sidebar Functions
@@ -251,6 +255,7 @@ async function loadSessionHistory() {
         });
     } catch (e) {
         console.error('Failed to load session history:', e);
+        notify(`Failed to load history: ${e.message}`, 'error');
     }
 }
 
@@ -443,7 +448,10 @@ async function loadDocuments() {
     if (!docList || !sessionId) return;
     try {
         const response = await fetch(`/api/documents?session_id=${sessionId}`);
-        if (!response.ok) return;
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || `Server error ${response.status}`);
+        }
         const docs = await response.json();
         docList.innerHTML = '';
         docs.forEach(doc => {

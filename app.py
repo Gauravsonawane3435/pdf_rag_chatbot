@@ -30,11 +30,13 @@ is_postgres = DATABASE_URL.startswith("postgresql")
 try:
     if is_postgres:
         logger.info(f"[DB] Initializing PostgreSQL engine...")
+        # Railway external URLs often require SSL
         engine = create_engine(
             DATABASE_URL, 
             pool_pre_ping=True,
             pool_size=10,
-            max_overflow=20
+            max_overflow=20,
+            connect_args={"sslmode": "require"} if "rlwy.net" in DATABASE_URL else {}
         )
     else:
         logger.info(f"[DB] Initializing SQLite engine...")
@@ -53,12 +55,14 @@ try:
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
     # Create tables
+    logger.info("[DB] Verifying schemas and creating tables...")
     Base.metadata.create_all(bind=engine)
     logger.info("[DB] Database tables verified/created successfully.")
 except Exception as e:
     logger.critical(f"[DB] Critical error during database initialization: {e}")
-    # In production, we might want to exit if DB fails
-    # sys.exit(1)
+    # Still initialize SessionLocal so routes don't crash on import, 
+    # but they will error when used, which we handle in get_db
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Dependency to get DB session
 def get_db():
@@ -121,41 +125,47 @@ async def get_session(session_id: Optional[str] = None, db: Session = Depends(ge
         # Return a potential ID but DON'T save to DB yet (Lazy creation)
         return {"session_id": str(uuid.uuid4()), "history": []}
     
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
-    if not session:
-        # If ID was provided but not in DB, return a fresh slate
-        return {"session_id": str(uuid.uuid4()), "history": []}
+    try:
+        session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+        if not session:
+            # If ID was provided but not in DB, return a fresh slate
+            return {"session_id": str(uuid.uuid4()), "history": []}
+            
+        history = [{
+            "sender": msg.sender,
+            "content": msg.content,
+            "sources": msg.sources,
+            "timestamp": msg.timestamp.isoformat()
+        } for msg in session.messages]
         
-    history = [{
-        "sender": msg.sender,
-        "content": msg.content,
-        "sources": msg.sources,
-        "timestamp": msg.timestamp.isoformat()
-    } for msg in session.messages]
-    
-    return {"session_id": session.id, "history": history}
+        return {"session_id": session.id, "history": history}
+    except Exception as e:
+        logger.error(f"Error in get_session: {e}")
+        return JSONResponse(status_code=500, content={"error": f"Database error: {str(e)}"})
 
 @app.get("/api/history")
 async def get_all_sessions(db: Session = Depends(get_db)):
-    sessions = db.query(ChatSession).order_by(desc(ChatSession.updated_at)).all()
-    history = []
-    for s in sessions:
-        # Filter: Only show sessions with actual content (messages or documents)
-        if not s.messages and not s.documents:
-            continue
+    try:
+        sessions = db.query(ChatSession).order_by(desc(ChatSession.updated_at)).all()
+        history = []
+        for s in sessions:
+            if not s.messages and not s.documents:
+                continue
+                
+            title = "New Chat"
+            user_msgs = [m for m in s.messages if m.sender == 'user']
+            if user_msgs:
+                title = user_msgs[0].content[:45] + ("..." if len(user_msgs[0].content) > 45 else "")
             
-        # Find the first user message for the title
-        title = "New Chat"
-        user_msgs = [m for m in s.messages if m.sender == 'user']
-        if user_msgs:
-            title = user_msgs[0].content[:45] + ("..." if len(user_msgs[0].content) > 45 else "")
-        
-        history.append({
-            "id": s.id,
-            "updated_at": s.updated_at.isoformat(),
-            "preview": title
-        })
-    return history
+            history.append({
+                "id": s.id,
+                "updated_at": s.updated_at.isoformat(),
+                "preview": title
+            })
+        return history
+    except Exception as e:
+        logger.error(f"Error in get_all_sessions: {e}")
+        return JSONResponse(status_code=500, content={"error": f"Database error: {str(e)}"})
 
 @app.post("/api/upload")
 async def upload_files(
@@ -163,43 +173,48 @@ async def upload_files(
     files: List[UploadFile] = File(...),
     db: Session = Depends(get_db)
 ):
-    # Ensure session exists (Lazy creation)
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
-    if not session:
-        session = ChatSession(id=session_id)
-        db.add(session)
-        db.commit()
+    try:
+        # Ensure session exists (Lazy creation)
+        session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+        if not session:
+            session = ChatSession(id=session_id)
+            db.add(session)
+            db.commit()
 
-    processed_docs = []
-    for file in files:
-        if not file.filename:
-            continue
+        processed_docs = []
+        for file in files:
+            if not file.filename:
+                continue
+                
+            filename = file.filename
+            file_path = os.path.join(Config.UPLOAD_FOLDER, f"{session_id}_{filename}")
             
-        filename = file.filename
-        file_path = os.path.join(Config.UPLOAD_FOLDER, f"{session_id}_{filename}")
-        
-        with open(file_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
-        
-        try:
-            docs = DocumentProcessor.process_file(file_path)
-            rag_service.add_documents(session_id, docs)
+            with open(file_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
             
-            new_doc = Document(
-                session_id=session_id,
-                filename=filename,
-                file_path=file_path,
-                file_type=filename.split('.')[-1]
-            )
-            db.add(new_doc)
-            processed_docs.append(filename)
-        except Exception as e:
-            db.rollback()
-            raise HTTPException(status_code=500, detail=f"Error processing {filename}: {str(e)}")
-            
-    db.commit()
-    return {"message": f"Successfully processed {len(processed_docs)} files", "files": processed_docs}
+            try:
+                docs = DocumentProcessor.process_file(file_path)
+                rag_service.add_documents(session_id, docs)
+                
+                new_doc = Document(
+                    session_id=session_id,
+                    filename=filename,
+                    file_path=file_path,
+                    file_type=filename.split('.')[-1]
+                )
+                db.add(new_doc)
+                processed_docs.append(filename)
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Error processing {filename}: {e}")
+                raise HTTPException(status_code=500, detail=f"Error processing {filename}: {str(e)}")
+                
+        db.commit()
+        return {"message": f"Successfully processed {len(processed_docs)} files", "files": processed_docs}
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        return JSONResponse(status_code=500, content={"error": f"Upload failure: {str(e)}"})
 
 @app.post("/api/chat")
 async def chat(request: Request, db: Session = Depends(get_db)):
@@ -384,24 +399,32 @@ async def chat_stream(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/api/analytics")
 async def get_analytics(session_id: str, db: Session = Depends(get_db)):
-    analytics = db.query(QueryAnalytics).filter(QueryAnalytics.session_id == session_id).all()
-    return [{
-        "query": a.query,
-        "response_time": a.response_time,
-        "num_sources": a.num_sources,
-        "answer_length": a.answer_length,
-        "timestamp": a.timestamp.isoformat()
-    } for a in analytics]
+    try:
+        analytics = db.query(QueryAnalytics).filter(QueryAnalytics.session_id == session_id).all()
+        return [{
+            "query": a.query,
+            "response_time": a.response_time,
+            "num_sources": a.num_sources,
+            "answer_length": a.answer_length,
+            "timestamp": a.timestamp.isoformat()
+        } for a in analytics]
+    except Exception as e:
+        logger.error(f"Analytics error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.get("/api/documents")
 async def list_documents(session_id: str, db: Session = Depends(get_db)):
-    docs = db.query(Document).filter(Document.session_id == session_id).all()
-    return [{
-        "id": d.id,
-        "filename": d.filename,
-        "file_type": d.file_type,
-        "upload_date": d.upload_date.isoformat()
-    } for d in docs]
+    try:
+        docs = db.query(Document).filter(Document.session_id == session_id).all()
+        return [{
+            "id": d.id,
+            "filename": d.filename,
+            "file_type": d.file_type,
+            "upload_date": d.upload_date.isoformat()
+        } for d in docs]
+    except Exception as e:
+        logger.error(f"Documents list error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/api/clear-session")
 async def clear_session(request: Request, db: Session = Depends(get_db)):
