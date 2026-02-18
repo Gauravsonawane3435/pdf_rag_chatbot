@@ -140,18 +140,7 @@ function setupEventListeners() {
 
     if (chatInput && sendBtn) {
         chatInput.addEventListener('input', () => {
-            const hasText = chatInput.value.trim() !== '';
-            sendBtn.disabled = !hasText;
-
-            // Visual feedback for send button like ChatGPT
-            if (hasText) {
-                sendBtn.classList.add('bg-primary-600', 'text-white');
-                sendBtn.classList.remove('bg-gray-200', 'dark:bg-slate-800', 'text-gray-400', 'dark:text-slate-600');
-            } else {
-                sendBtn.classList.remove('bg-primary-600', 'text-white');
-                sendBtn.classList.add('bg-gray-200', 'dark:bg-slate-800', 'text-gray-400', 'dark:text-slate-600');
-            }
-
+            sendBtn.disabled = chatInput.value.trim() === '';
             chatInput.style.height = 'auto';
             chatInput.style.height = chatInput.scrollHeight + 'px';
         });
@@ -162,24 +151,6 @@ function setupEventListeners() {
                 sendMessage();
             }
         });
-    }
-
-    const mobileNewChat = document.getElementById('mobile-new-chat-btn');
-    if (mobileNewChat) mobileNewChat.onclick = () => window.location.reload();
-
-    const mobileUpload = document.getElementById('mobile-upload-btn');
-    if (mobileUpload && fileInput) mobileUpload.onclick = () => fileInput.click();
-
-    const scrollBottomBtn = document.getElementById('scroll-bottom-btn');
-    if (scrollBottomBtn && chatMessages) {
-        chatMessages.addEventListener('scroll', () => {
-            const isScrolledUp = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight > 200;
-            if (isScrolledUp) scrollBottomBtn.classList.add('show');
-            else scrollBottomBtn.classList.remove('show');
-        });
-        scrollBottomBtn.onclick = () => {
-            chatMessages.scrollTo({ top: chatMessages.scrollHeight, behavior: 'smooth' });
-        };
     }
 
     if (dropZone && fileInput) {
@@ -436,8 +407,8 @@ function createBotMessageShell() {
     const div = document.createElement('div');
     div.className = 'flex justify-start animate-slide-in';
     div.innerHTML = `
-        <div class="max-w-[100%] md:max-w-[80%] flex flex-row items-start gap-3 md:gap-4">
-            <div class="bot-avatar w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-sm bg-gray-200 dark:bg-slate-800 text-gray-500 dark:text-slate-400">
+        <div class="max-w-[90%] md:max-w-[80%] flex flex-row items-start gap-4">
+            <div class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-sm bg-gray-200 dark:bg-slate-800 text-gray-500 dark:text-slate-400">
                 <i class="fas fa-robot"></i>
             </div>
             <div class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 text-gray-800 dark:text-slate-100 chat-bubble-bot shadow-sm message-container w-full min-w-0 overflow-hidden">
@@ -525,8 +496,8 @@ function appendMessage(sender, content, sources = []) {
     const div = document.createElement('div');
     div.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'} animate-slide-in`;
     div.innerHTML = `
-        <div class="max-w-[100%] md:max-w-[80%] flex ${sender === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-3 md:gap-4 w-full">
-            <div class="${sender === 'user' ? 'user-avatar' : 'bot-avatar'} w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-sm ${sender === 'user' ? 'bg-primary-600 text-white' : 'bg-gray-200 dark:bg-slate-800 text-gray-500 dark:text-slate-400'}">
+        <div class="max-w-[90%] md:max-w-[80%] flex ${sender === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-4">
+            <div class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-sm ${sender === 'user' ? 'bg-primary-600 text-white' : 'bg-gray-200 dark:bg-slate-800 text-gray-500 dark:text-slate-400'}">
                 <i class="fas ${sender === 'user' ? 'fa-user' : 'fa-robot'}"></i>
             </div>
             <div class="p-4 rounded-2xl ${sender === 'user' ? 'bg-primary-600 text-white chat-bubble-user shadow-lg shadow-primary-500/20' : 'bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 text-gray-800 dark:text-slate-100 chat-bubble-bot shadow-sm'} w-full min-w-0 overflow-hidden">

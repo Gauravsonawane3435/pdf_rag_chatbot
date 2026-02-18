@@ -9,15 +9,6 @@
     height: 100dvh;
 }
 
-.no-scrollbar::-webkit-scrollbar {
-    display: none;
-}
-
-.no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-}
-
 .custom-scrollbar::-webkit-scrollbar {
     width: 5px;
 }
@@ -188,24 +179,6 @@
     border-bottom-left-radius: 4px;
 }
 
-@media (max-width: 640px) {
-
-    .bot-avatar,
-    .user-avatar {
-        display: none !important;
-    }
-
-    .chat-bubble-user,
-    .chat-bubble-bot {
-        max-width: 100% !important;
-        border-radius: 1.25rem !important;
-    }
-
-    #model-select {
-        text-align-last: center;
-    }
-}
-
 /* Responsive Table in Analytics */
 #analytics-table {
     min-width: 100%;
@@ -310,10 +283,8 @@
 }
 
 /* Dark mode specific scrollbar */
-#scroll-bottom-btn.show {
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(-10px);
+.dark ::-webkit-scrollbar-thumb {
+    background: #334155;
 }
 
 /* Selection color */
