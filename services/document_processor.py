@@ -17,10 +17,11 @@ class DocumentProcessor:
         DocumentProcessor.multimodal_processor = MultiModalProcessor(groq_api_key)
     
     @staticmethod
-    def process_file(file_path, use_multimodal=True):
+    def process_file(file_path, use_vision=True):
         ext = os.path.splitext(file_path)[1].lower()
         if ext == '.pdf':
-            return DocumentProcessor._process_pdf(file_path, use_multimodal)
+            return DocumentProcessor._process_pdf(file_path, use_vision)
+
         elif ext in ['.docx', '.doc']:
             return DocumentProcessor._process_docx(file_path)
         elif ext in ['.xlsx', '.xls']:
@@ -35,11 +36,12 @@ class DocumentProcessor:
             raise ValueError(f"Unsupported file format: {ext}")
 
     @staticmethod
-    def _process_pdf(file_path, use_multimodal=True):
-        # Use advanced multi-modal processing if available
-        if use_multimodal and DocumentProcessor.multimodal_processor:
+    def _process_pdf(file_path, use_vision=True):
+        # Use advanced multi-modal processing path
+        if DocumentProcessor.multimodal_processor:
             try:
-                return DocumentProcessor.multimodal_processor.process_pdf_multimodal(file_path)
+                return DocumentProcessor.multimodal_processor.process_pdf_multimodal(file_path, use_vision=use_vision)
+
             except Exception as e:
                 print(f"Multi-modal processing failed, falling back to basic: {e}")
         

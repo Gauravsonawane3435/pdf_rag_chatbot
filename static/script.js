@@ -418,7 +418,10 @@ function createBotMessageShell() {
     return div;
 }
 
+const visionToggle = document.getElementById('vision-toggle');
+
 async function handleFileUpload(e) {
+
     const files = (e.target && e.target.files) ? e.target.files : (e.dataTransfer ? e.dataTransfer.files : []);
     if (!files || files.length === 0) return;
     if (!sessionId) {
@@ -427,6 +430,7 @@ async function handleFileUpload(e) {
     }
     const formData = new FormData();
     formData.append('session_id', sessionId);
+    formData.append('use_vision', visionToggle ? visionToggle.checked : false);
     for (const file of files) formData.append('files', file);
 
     if (uploadStatus) {
@@ -438,9 +442,12 @@ async function handleFileUpload(e) {
         const response = await fetch('/api/upload', { method: 'POST', body: formData });
         const data = await response.json();
         if (data.error) notify(data.error, 'error');
-        else loadDocuments();
+        else {
+            notify(`Successfully uploaded ${data.files.length} documents.`);
+            loadDocuments();
+        }
     } catch (e) {
-        notify('Upload failed', 'error');
+        notify('Upload failed. Check your internet connection.', 'error');
     } finally {
         if (uploadStatus) {
             uploadStatus.classList.add('hidden');
@@ -448,6 +455,7 @@ async function handleFileUpload(e) {
         }
     }
 }
+
 
 async function loadDocuments() {
     if (!docList || !sessionId) return;

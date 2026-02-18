@@ -5,7 +5,7 @@ from datetime import datetime
 import json
 import uuid
 from typing import List, Optional
-from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException, Depends
+from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -173,8 +173,10 @@ async def get_all_sessions(db: Session = Depends(get_db)):
 @app.post("/api/upload")
 async def upload_files(
     session_id: str = Form(...),
+    use_vision: str = Form("false"),  # Form data comes as string
     files: List[UploadFile] = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = Depends(BackgroundTasks)
 ):
     try:
         # Ensure session exists (Lazy creation)
@@ -184,7 +186,9 @@ async def upload_files(
             db.add(session)
             db.commit()
 
+        is_vision_enabled = use_vision.lower() == "true"
         processed_docs = []
+        
         for file in files:
             if not file.filename:
                 continue
@@ -192,32 +196,53 @@ async def upload_files(
             filename = file.filename
             file_path = os.path.join(Config.UPLOAD_FOLDER, f"{session_id}_{filename}")
             
+            # 1. Save file synchronously (or async read but wait for save)
             with open(file_path, "wb") as buffer:
                 content = await file.read()
                 buffer.write(content)
             
-            try:
-                docs = DocumentProcessor.process_file(file_path)
-                rag_service.add_documents(session_id, docs)
-                
-                new_doc = Document(
-                    session_id=session_id,
-                    filename=filename,
-                    file_path=file_path,
-                    file_type=filename.split('.')[-1]
-                )
-                db.add(new_doc)
-                processed_docs.append(filename)
-            except Exception as e:
-                db.rollback()
-                logger.error(f"Error processing {filename}: {e}")
-                raise HTTPException(status_code=500, detail=f"Error processing {filename}: {str(e)}")
+            # 2. Add to database immediately so user sees it in the list
+            new_doc = Document(
+                session_id=session_id,
+                filename=filename,
+                file_path=file_path,
+                file_type=filename.split('.')[-1]
+            )
+            db.add(new_doc)
+            processed_docs.append(filename)
+            
+            # 3. Queue heavy processing in background
+            background_tasks.add_task(
+                process_document_background, 
+                session_id, 
+                file_path, 
+                is_vision_enabled
+            )
                 
         db.commit()
-        return {"message": f"Successfully processed {len(processed_docs)} files", "files": processed_docs}
+        return {
+            "message": f"Successfully uploaded {len(processed_docs)} files. Processing in background...", 
+            "files": processed_docs
+        }
     except Exception as e:
         logger.error(f"Upload error: {e}")
         return JSONResponse(status_code=500, content={"error": f"Upload failure: {str(e)}"})
+
+# Background processing logic
+def process_document_background(session_id: str, file_path: str, use_vision: bool):
+    """Heavy lift processing: OCR, Vision, Embeddings, and Vector DB update."""
+    try:
+        logger.info(f"[Background] Starting processing for {file_path} (Vision: {use_vision})")
+        # Process file content (heavy operation)
+        docs = DocumentProcessor.process_file(file_path, use_multimodal=use_vision)
+        
+        # Add to RAG service (heavy operation: embedding)
+        rag_service.add_documents(session_id, docs)
+        
+        logger.info(f"[Background] Completed processing for {file_path}")
+    except Exception as e:
+        logger.error(f"[Background] Error processing {file_path}: {e}")
+
 
 @app.post("/api/chat")
 async def chat(request: Request, db: Session = Depends(get_db)):

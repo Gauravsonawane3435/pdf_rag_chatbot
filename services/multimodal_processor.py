@@ -39,13 +39,23 @@ class MultiModalProcessor:
         else:
             self.vision_llm = None
     
-    def process_pdf_multimodal(self, file_path: str) -> List[LC_Document]:
+    def process_pdf_multimodal(self, file_path: str, use_vision: bool = True) -> List[LC_Document]:
         """
         Process PDF with multi-modal extraction.
-        Returns documents with text, tables, and image descriptions.
+        If use_vision is False, uses a faster text-only extraction path.
         """
         documents = []
         
+        # Fast Path: No vision requested, use faster loader
+        if not use_vision:
+            try:
+                from langchain_community.document_loaders import PyPDFLoader
+                loader = PyPDFLoader(file_path)
+                return loader.load()
+            except Exception as e:
+                print(f"Fast path failed, falling back to plumber: {e}")
+
+        # Deep Path: Tables and Images extraction
         try:
             with pdfplumber.open(file_path) as pdf:
                 for page_num, page in enumerate(pdf.pages, start=1):
@@ -74,19 +84,20 @@ class MultiModalProcessor:
                         )
                         documents.append(doc)
             
-            # 4. Extract and analyze images (if vision model available)
-            if self.vision_llm:
+            # 4. Extract and analyze images (if vision model available and requested)
+            if self.vision_llm and use_vision:
                 image_docs = self._extract_images_with_vision(file_path)
                 documents.extend(image_docs)
             
         except Exception as e:
             print(f"Error in multi-modal processing: {e}")
-            # Fallback to basic text extraction
+            # Final fallback to basic text extraction
             from langchain_community.document_loaders import PyPDFLoader
             loader = PyPDFLoader(file_path)
             documents = loader.load()
         
         return documents
+
     
     def _format_tables(self, tables: List[List[List[str]]], page_num: int) -> str:
         """Format extracted tables as markdown-style text."""
