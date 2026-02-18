@@ -13,14 +13,12 @@ then
 fi
 
 # Start the application using UvicornWorker for FastAPI (ASGI)
-# Using 1 worker and 4 threads to save memory on free instances (Fixes 502)
 exec gunicorn app:app \
     --bind 0.0.0.0:$PORT \
-    --workers 1 \
+    --workers 2 \
     --threads 4 \
     --worker-class uvicorn.workers.UvicornWorker \
-    --timeout 300 \
+    --timeout 120 \
     --log-level info \
     --access-logfile - \
     --error-logfile -
-
